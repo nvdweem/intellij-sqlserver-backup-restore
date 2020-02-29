@@ -6,6 +6,7 @@ import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.application.ApplicationManager;
 import dev.niels.sqlbackuprestore.query.Connection;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
@@ -15,7 +16,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
-import java.awt.EventQueue;
 import java.sql.SQLWarning;
 import java.util.HashMap;
 import java.util.List;
@@ -28,7 +28,7 @@ import java.util.stream.Collectors;
 public class Restore extends AnAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-        EventQueue.invokeLater(() -> {
+        ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.connection(e)) {
                 var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null);
                 var file = FileDialog.chooseFile(e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'");

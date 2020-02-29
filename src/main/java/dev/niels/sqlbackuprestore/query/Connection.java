@@ -1,10 +1,12 @@
 package dev.niels.sqlbackuprestore.query;
 
 import com.intellij.database.dataSource.DatabaseConnection;
+import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.database.remote.jdbc.RemoteConnection;
 import com.intellij.database.remote.jdbc.RemoteResultSet;
 import com.intellij.database.remote.jdbc.RemoteStatement;
 import com.intellij.database.util.GuardedRef;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -35,11 +37,11 @@ public class Connection implements AutoCloseable {
 
     @Override
     public void close() {
+        set(null);
         if (closed) {
             return;
         }
         closed = true;
-        set(null);
         ref.close();
     }
 
@@ -71,6 +73,10 @@ public class Connection implements AutoCloseable {
     }
 
     public Optional<RemoteStatement> createStatement() {
+        if (closed) {
+            throw new IllegalStateException("Requesting statement from closed connection");
+        }
+
         RemoteStatement result = null;
         try {
             result = set(remoteConnection.createStatement());
@@ -94,21 +100,16 @@ public class Connection implements AutoCloseable {
         });
     }
 
-    public <T> Optional<T> getSingle(Class<T> resultType, String query, int column) {
-        return withResult(query, rs -> {
-            Object result = null;
-            if (rs.next()) {
-                result = rs.getObject(column);
-            }
-            return resultType.cast(result);
-        });
-    }
-
     public <T> Optional<T> getSingle(Class<T> resultType, String query, String column) {
         return withResult(query, rs -> {
             Object result = null;
             if (rs.next()) {
-                result = rs.getObject(column);
+                if (resultType == BlobWrapper.class) {
+                    result = new BlobWrapper(rs.getBlob(column), statement);
+                    statement = null; // Prevent closing statement until the blob is read
+                } else {
+                    result = rs.getObject(column);
+                }
             }
             return resultType.cast(result);
         });
@@ -146,6 +147,22 @@ public class Connection implements AutoCloseable {
                     return Optional.empty();
                 }
         );
+    }
+
+    /**
+     * Keeps a reference to the statement close to the blob hoping that the Garbage Collector won't clean it
+     */
+    @RequiredArgsConstructor
+    public static class BlobWrapper implements AutoCloseable {
+        @Getter
+        private final RemoteBlob blob;
+        private final RemoteStatement statement;
+
+        @Override
+        public void close() throws Exception {
+            blob.free();
+            statement.close();
+        }
     }
 
     public interface ResultSetFunction<T> {

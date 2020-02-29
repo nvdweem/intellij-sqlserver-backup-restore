@@ -10,7 +10,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import dev.niels.sqlbackuprestore.query.Connection;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -170,9 +169,7 @@ public class FileDialog {
     private class RemoteFile extends VirtualFile {
         private final DatabaseFileSystem databaseFileSystem;
         private final RemoteFile parent;
-        @Getter
         private final String path;
-        @Getter
         private final boolean directory;
         private VirtualFile[] children;
 
