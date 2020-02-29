@@ -25,6 +25,14 @@ public class Connection implements AutoCloseable {
     private RemoteStatement statement;
     private boolean closed = false;
 
+    public Connection takeOver() {
+        if (closed) {
+            throw new IllegalStateException("Unable to take over connection that is already closed");
+        }
+        closed = true;
+        return new Connection(ref, remoteConnection);
+    }
+
     @Override
     public void close() {
         if (closed) {

@@ -17,16 +17,27 @@ public class ProgressTask extends Task.Backgroundable {
     private static final Pattern progressPattern = Pattern.compile("\\d+");
     private final Consumer<Consumer<SQLWarning>> run;
     private ProgressIndicator indicator;
+    private Runnable afterFinish;
 
     public ProgressTask(@Nullable Project project, @Nls(capitalization = Nls.Capitalization.Title) @NotNull String title, boolean canBeCancelled, Consumer<Consumer<SQLWarning>> run) {
         super(project, title, canBeCancelled);
         this.run = run;
     }
 
+    public ProgressTask afterFinish(Runnable r) {
+        afterFinish = r;
+        return this;
+    }
+
+    @Override
+    public void onFinished() {
+        afterFinish.run();
+    }
+
     @Override
     public void run(ProgressIndicator indicator) {
         this.indicator = indicator;
-        indicator.setText("Restoring backup");
+        indicator.setText(getTitle());
         indicator.setIndeterminate(false);
         indicator.setFraction(0.0);
 

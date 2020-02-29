@@ -9,11 +9,13 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import dev.niels.sqlbackuprestore.query.Connection;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
+import dev.niels.sqlbackuprestore.ui.FileDialog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
+import java.awt.EventQueue;
 import java.sql.SQLWarning;
 import java.util.HashMap;
 import java.util.List;
@@ -26,13 +28,25 @@ import java.util.stream.Collectors;
 public class Restore extends AnAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-        new ProgressTask(e.getProject(), "Restore backup", false, consumer -> QueryHelper.getDatabase(e).map(DasObject::getName).ifPresent(dbName -> {
-            try (var helper = new RestoreHelper(e, dbName, "C:\\temp\\backup.bak", consumer)) {
-                helper.restore();
-            } catch (Exception ex) {
-                log.error("Unable to restore database", ex);
+        EventQueue.invokeLater(() -> {
+            try (var c = QueryHelper.connection(e)) {
+                var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null);
+                var file = FileDialog.chooseFile(e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'");
+                if (StringUtils.isBlank(file)) {
+                    return;
+                }
+
+                var newC = c.takeOver();
+                new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
+                    try (var helper = new RestoreHelper(e, target, file, consumer)) {
+                        helper.restore();
+                    } catch (Exception ex) {
+                        log.error("Unable to restore database", ex);
+                    }
+                }).afterFinish(newC::close).queue();
             }
-        })).queue();
+        });
+
     }
 
     @RequiredArgsConstructor
