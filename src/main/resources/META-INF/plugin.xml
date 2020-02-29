@@ -1,0 +1,23 @@
+<idea-plugin>
+    <id>dev.niels.SQLServerBackupAndRestore</id>
+    <name>SQL Server backup and restore</name>
+    <vendor email="support@niels.dev" url="http://www.google.com">Niels</vendor>
+
+    <description><![CDATA[
+    A way to restore and create backups for Microsoft SQL Server from the DataGrip window.
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.database</depends>
+
+    <extensions defaultExtensionNs="com.intellij" />
+
+    <actions>
+        <group id="org.jetbrains.tutorials.actions.GroupedActions" text="Backup / Restore" popup="true">
+            <add-to-group group-id="DatabaseViewPopupMenu" anchor="after" relative-to-action="DatabaseView.RunExtensionScriptGroup"/>
+            <action id="backup" class="dev.niels.sqlbackuprestore.action.Backup" text="Backup" description="Backup from bak file"/>
+            <action id="restore" class="dev.niels.sqlbackuprestore.action.Restore" text="Restore" description="Restore from bak file"/>
+        </group>
+    </actions>
+
+</idea-plugin>
