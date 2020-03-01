@@ -7,6 +7,7 @@ import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
+import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Connection;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
@@ -112,7 +113,7 @@ public class Restore extends AnAction {
 
         private void progress(SQLWarning warning) {
             if (warning.getErrorCode() == -1) {
-                Notifications.Bus.notify(new Notification("BackupRestore", "Unable to restore " + target, warning.getCause().getMessage(), NotificationType.ERROR));
+                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to restore " + target, warning.getCause().getMessage(), NotificationType.ERROR));
             } else {
                 progressConsumer.accept(warning);
             }
