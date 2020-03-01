@@ -5,17 +5,23 @@ import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.database.remote.jdbc.RemoteConnection;
 import com.intellij.database.remote.jdbc.RemoteResultSet;
 import com.intellij.database.remote.jdbc.RemoteStatement;
+import com.intellij.database.remote.jdbc.impl.ReflectionHelper;
 import com.intellij.database.util.GuardedRef;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.SQLWarning;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Consumer;
 
 @RequiredArgsConstructor
@@ -87,8 +93,8 @@ public class Connection implements AutoCloseable {
     }
 
     public Optional<List<Map<String, Object>>> getResult(String query) {
-        return withResult(query, rs -> {
-            var result = new ArrayList<Map<String, Object>>();
+        var r = withResult(query, rs -> {
+            List<Map<String, Object>> result = new ArrayList<>();
             while (rs.next()) {
                 Map<String, Object> row = new HashMap<>();
                 for (int i = 1; i < rs.getMetaData().getColumnCount(); i++) {
@@ -98,14 +104,16 @@ public class Connection implements AutoCloseable {
             }
             return result;
         });
+        r.getLeft().close();
+        return r.getRight();
     }
 
     public <T> Optional<T> getSingle(Class<T> resultType, String query, String column) {
-        return withResult(query, rs -> {
+        var r = withResult(query, rs -> {
             Object result = null;
             if (rs.next()) {
                 if (resultType == BlobWrapper.class) {
-                    result = new BlobWrapper(rs.getBlob(column), statement);
+                    result = new BlobWrapper(rs.getBlob(column));
                     statement = null; // Prevent closing statement until the blob is read
                 } else {
                     result = rs.getObject(column);
@@ -113,20 +121,27 @@ public class Connection implements AutoCloseable {
             }
             return resultType.cast(result);
         });
+        r.getRight().filter(BlobWrapper.class::isInstance).ifPresentOrElse(bw -> ((BlobWrapper) bw).setWrapper(r.getLeft()), r.getLeft()::close);
+        return r.getRight();
     }
 
     public void execute(String query) {
         withResult(query, x -> null);
     }
 
-    private <T> Optional<T> withResult(String query, ResultSetFunction<T> fnc) {
-        return createStatement().flatMap(s -> {
+    private <T> Pair<ClosableWrapper, Optional<T>> withResult(String query, ResultSetFunction<T> fnc) {
+        var close = new ClosableWrapper();
+        return Pair.of(close, createStatement().flatMap(s -> {
+                    close.add(s);
+
                     var reader = WarningReader.ifNeeded(s, warningConsumer);
                     warningConsumer = null;
-
                     try {
                         if (s.execute(query)) {
-                            return Optional.of(fnc.apply(s.getResultSet()));
+                            var results = s.getResultSet();
+                            close.add(results);
+
+                            return Optional.of(fnc.apply(results));
                         }
                     } catch (Exception e) {
                         reader.ifPresentOrElse(r -> r.consume(-1, "Error while reading", e),
@@ -138,15 +153,33 @@ public class Connection implements AutoCloseable {
                             if (!warnings.isEmpty()) {
                                 log.warn("Warnings were given while executing that weren't consumed {}: {}", query, warnings);
                             }
-
-                            set(null);
                         } catch (Exception e) {
                             log.error("Unable to close statement for '{}'", query);
                         }
                     }
                     return Optional.empty();
                 }
-        );
+        ));
+    }
+
+    @Slf4j
+    private static class ClosableWrapper implements AutoCloseable {
+        private final Set<Object> closables = new HashSet<>();
+
+        public void add(Object c) {
+            closables.add(c);
+        }
+
+        @Override
+        public void close() {
+            for (Object closable : closables) {
+                try {
+                    ReflectionHelper.tryInvokeMethod(closable, "close", null, null);
+                } catch (Exception e) {
+                    log.error("Unable to close {}", closable);
+                }
+            }
+        }
     }
 
     /**
@@ -156,12 +189,13 @@ public class Connection implements AutoCloseable {
     public static class BlobWrapper implements AutoCloseable {
         @Getter
         private final RemoteBlob blob;
-        private final RemoteStatement statement;
+        @Setter(AccessLevel.PRIVATE)
+        private ClosableWrapper wrapper;
 
         @Override
         public void close() throws Exception {
             blob.free();
-            statement.close();
+            wrapper.close();
         }
     }
 
