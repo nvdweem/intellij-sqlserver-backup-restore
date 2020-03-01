@@ -13,8 +13,8 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import dev.niels.sqlbackuprestore.query.Connection;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
-import dev.niels.sqlbackuprestore.ui.FileDialog;
 import lombok.SneakyThrows;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -28,16 +28,21 @@ public class Download extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.connection(e)) {
-                var source = FileDialog.chooseFile(e.getProject(), c, "Choose file", "Choose file to download");
-                if (StringUtils.isEmpty(source)) {
-                    return;
-                }
-                var target = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(null, null).getFile();
-                new DownloadTask(e.getProject(), c.takeOver(), source, target).queue();
+                new Backup().backup(e, c).thenApply(p -> {
+                    var source = p.getRight();
+                    if (StringUtils.isEmpty(source)) {
+                        return p.getLeft();
+                    }
+
+                    var target = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(null, null).getFile();
+                    new DownloadTask(e.getProject(), p.getLeft().takeOver(), source, target).queue();
+                    return p.getLeft();
+                }).thenAccept(Connection::close);
             }
         });
     }
 
+    @Slf4j
     private static class DownloadTask extends Task.Backgroundable {
         private static final int CHUNK_SIZE = 1024 * 1024;
         private final Connection connection;
@@ -80,7 +85,9 @@ public class Download extends AnAction {
                     indicator.setFraction((double) position / size);
                     indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(position), Util.humanReadableByteCountSI(size)));
                 }
+                Notifications.Bus.notify(new Notification("BackupRestore", "Success", "Download completed", NotificationType.INFORMATION));
             } catch (Exception e) {
+                log.error("Error occurred while downloading", e);
                 Notifications.Bus.notify(new Notification("BackupRestore", "Failed to download", "The download failed with message:\n" + e.getMessage(), NotificationType.ERROR));
             }
         }

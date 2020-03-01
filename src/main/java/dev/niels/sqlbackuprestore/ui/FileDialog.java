@@ -11,6 +11,7 @@ import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import dev.niels.sqlbackuprestore.query.Connection;
 import lombok.RequiredArgsConstructor;
+import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -60,7 +61,7 @@ public class FileDialog {
 
             if (myPathTextField.getField().getRootPane() != null) {
                 String text = myPathTextField.getTextFieldText();
-                myChosenFiles = new VirtualFile[]{new RemoteFile(null, null, text.substring("mssqlDb://".length()), false)};
+                myChosenFiles = new VirtualFile[]{new RemoteFile(null, null, StringUtils.removeStartIgnoreCase(text, "mssqlDb://"), false)};
                 close(OK_EXIT_CODE);
                 return;
             }
