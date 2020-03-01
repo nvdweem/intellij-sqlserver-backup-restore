@@ -14,6 +14,9 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Backup database to a file
+ */
 @Slf4j
 public class Backup extends AnAction {
     @Override
@@ -25,6 +28,13 @@ public class Backup extends AnAction {
         });
     }
 
+    /**
+     * Asks for a (remote) file and backs the selected database up to that file.
+     *
+     * @param e the event that triggered the action (the database is retrieved from the action)
+     * @param c the connection that should be used for backing up (will be taken over if a backup is being made, close it from the future as well).
+     * @return a pair of the connection that should be closed and the file that was being selected. The original connection and null if no file was selected.
+     */
     protected CompletableFuture<Pair<Connection, String>> backup(@NotNull AnActionEvent e, Connection c) {
         var database = QueryHelper.getDatabase(e);
         var target = FileDialog.chooseFile(e.getProject(), c, "Backup to file", "Select a file to backup '" + database + "' to");

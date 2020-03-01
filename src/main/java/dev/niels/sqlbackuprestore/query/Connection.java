@@ -24,6 +24,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Consumer;
 
+/**
+ * A closable connection.
+ * It's kind of a hassle to ensure the connection is closed and still be able to pass it around.
+ * Use takeOver to get a new owning Connection that can be passed outside of a try-with-resources.
+ * <p>
+ * The connection class is not thread safe, only one Statement should be done at a time.
+ */
 @RequiredArgsConstructor
 @Slf4j
 public class Connection implements AutoCloseable {
@@ -33,6 +40,9 @@ public class Connection implements AutoCloseable {
     private RemoteStatement statement;
     private boolean closed = false;
 
+    /**
+     * Pretend that the current connection is closed and return a new connection that isn't closed.
+     */
     public Connection takeOver() {
         if (closed) {
             log.error("Unable to take over connection that is already closed");
@@ -52,11 +62,17 @@ public class Connection implements AutoCloseable {
         ref.close();
     }
 
+    /**
+     * Allow attaching a warning consumer for the next statement (can be useful for progress messages).
+     */
     public Connection withMessages(Consumer<SQLWarning> consumer) {
         warningConsumer = consumer;
         return this;
     }
 
+    /**
+     * Close the previous and set a new statement.
+     */
     private RemoteStatement set(RemoteStatement s) {
         try {
             if (statement != null && !statement.isClosed()) {
@@ -67,16 +83,6 @@ public class Connection implements AutoCloseable {
         }
         statement = s;
         return s;
-    }
-
-    public void cancel() {
-        try {
-            if (statement != null && !statement.isClosed()) {
-                statement.cancel();
-            }
-        } catch (Exception e) {
-            log.error("Unable to cancel statement");
-        }
     }
 
     public Optional<RemoteStatement> createStatement() {
@@ -93,6 +99,9 @@ public class Connection implements AutoCloseable {
         return Optional.ofNullable(result);
     }
 
+    /**
+     * Get a result set for a query as a list of maps.
+     */
     public Optional<List<Map<String, Object>>> getResult(String query) {
         var r = withResult(query, rs -> {
             List<Map<String, Object>> result = new ArrayList<>();
@@ -109,6 +118,10 @@ public class Connection implements AutoCloseable {
         return r.getRight();
     }
 
+    /**
+     * Execute the query and return the column from the first row of the resultset.
+     * Set resultType to BlobWrapper for blob access.
+     */
     public <T> Optional<T> getSingle(Class<T> resultType, String query, String column) {
         var r = withResult(query, rs -> {
             Object result = null;
@@ -126,10 +139,17 @@ public class Connection implements AutoCloseable {
         return r.getRight();
     }
 
+    /**
+     * Execute a query and don't care about the result.
+     */
     public void execute(String query) {
-        withResult(query, x -> null);
+        withResult(query, x -> null).getLeft().close();
     }
 
+    /**
+     * Helper function to execute a query and use the resultset.
+     * Be sure to either return the ClosableWrapper or close it before returning the result.
+     */
     private <T> Pair<ClosableWrapper, Optional<T>> withResult(String query, ResultSetFunction<T> fnc) {
         var close = new ClosableWrapper();
         return Pair.of(close, createStatement().flatMap(s -> {
@@ -163,6 +183,9 @@ public class Connection implements AutoCloseable {
         ));
     }
 
+    /**
+     * Helper class to close stuff.
+     */
     @Slf4j
     private static class ClosableWrapper implements AutoCloseable {
         private final Set<Object> closables = new HashSet<>();
@@ -194,7 +217,7 @@ public class Connection implements AutoCloseable {
         private ClosableWrapper wrapper;
 
         @Override
-        public void close() throws Exception {
+        public void close() {
             try {
                 blob.free();
             } catch (Exception e) {
@@ -204,7 +227,7 @@ public class Connection implements AutoCloseable {
         }
     }
 
-    public interface ResultSetFunction<T> {
+    private interface ResultSetFunction<T> {
         T apply(RemoteResultSet rs) throws Exception; // NOSONAR
     }
 }

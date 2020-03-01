@@ -12,6 +12,9 @@ import java.sql.SQLWarning;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
+/**
+ * Task that keeps track of progress for backup/restore actions.
+ */
 @Slf4j
 public class ProgressTask extends Task.Backgroundable {
     private static final Pattern progressPattern = Pattern.compile("\\d+");

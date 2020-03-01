@@ -21,6 +21,9 @@ import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * File dialog to show remote files from SQLServer.
+ */
 @RequiredArgsConstructor
 public class FileDialog {
     private final Project project;
@@ -28,6 +31,9 @@ public class FileDialog {
     private final String title;
     private final String description;
 
+    /**
+     * Open the file dialog to show files from the connection.
+     */
     public static String chooseFile(Project project, Connection c, String title, String description) {
         return new FileDialog(project, c, title, description).choose();
     }
@@ -44,6 +50,9 @@ public class FileDialog {
         return null;
     }
 
+    /**
+     * Custom file chooser to work around the original class using the doOKAction check.
+     */
     private class Chooser extends FileChooserDialogImpl {
         private VirtualFile[] myChosenFiles = VirtualFile.EMPTY_ARRAY;
         private final FileChooserDescriptor myChooserDescriptor;
@@ -53,12 +62,16 @@ public class FileDialog {
             myChooserDescriptor = descriptor;
         }
 
+        /**
+         * Blegh
+         */
         @Override
         protected void doOKAction() {
             if (!isOKActionEnabled()) {
                 return;
             }
 
+            // Changed to not care about the file existing.
             if (myPathTextField.getField().getRootPane() != null) {
                 String text = myPathTextField.getTextFieldText();
                 myChosenFiles = new VirtualFile[]{new RemoteFile(null, null, StringUtils.removeStartIgnoreCase(text, "mssqlDb://"), false)};
@@ -93,6 +106,9 @@ public class FileDialog {
         }
     }
 
+    /**
+     * Lists files from the connection
+     */
     private class DatabaseFileSystem extends VirtualFileSystem {
         public VirtualFile[] getRoots() {
             return connection.getResult("EXEC master..xp_fixeddrives").map(rs -> rs.stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true)).toArray(RemoteFile[]::new)).orElse(new RemoteFile[0]);
@@ -167,6 +183,9 @@ public class FileDialog {
         }
     }
 
+    /**
+     * Tree navigation from the connection
+     */
     private class RemoteFile extends VirtualFile {
         private final DatabaseFileSystem databaseFileSystem;
         private final RemoteFile parent;

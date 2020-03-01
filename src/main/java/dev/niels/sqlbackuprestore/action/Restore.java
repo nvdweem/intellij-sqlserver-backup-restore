@@ -25,6 +25,9 @@ import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+/**
+ * Restore a database from a (remote) file. Cannot be a gzipped file.
+ */
 @Slf4j
 public class Restore extends AnAction {
     @Override

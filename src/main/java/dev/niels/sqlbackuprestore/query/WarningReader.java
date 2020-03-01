@@ -11,6 +11,10 @@ import java.sql.SQLWarning;
 import java.util.Optional;
 import java.util.function.Consumer;
 
+/**
+ * Thread that keeps trying to get the warnings from a statement.
+ * Can be used to get near real-time information about the progress of statements.
+ */
 @RequiredArgsConstructor
 @Slf4j
 public class WarningReader {

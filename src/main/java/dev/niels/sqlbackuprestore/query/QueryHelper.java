@@ -8,7 +8,6 @@ import com.intellij.database.psi.DbDataSource;
 import com.intellij.database.psi.DbNamespaceImpl;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import dev.niels.sqlbackuprestore.action.Query;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -16,10 +15,11 @@ import org.jetbrains.annotations.NotNull;
 import javax.swing.Icon;
 import java.util.Optional;
 
+/**
+ * Helper to go from actions to table names or connections.
+ */
 @Slf4j
 public abstract class QueryHelper {
-    private static DatabaseDepartment databaseDepartment;
-
     private QueryHelper() {
     }
 
@@ -47,50 +47,30 @@ public abstract class QueryHelper {
         return new Connection(ref, ref.get().getRemoteConnection());
     }
 
-    public static Query query(@NotNull AnActionEvent e, String query) {
-        var element = getNamespace(e);
-        if (element.isEmpty()) {
+    private static DatabaseDepartment databaseDepartment = new DatabaseDepartment() {
+        @Override
+        public String getDepartmentName() {
+            return "MSSQL Department name";
+        }
+
+        @Override
+        public String getCommonName() {
+            return "MSSQL Common name";
+        }
+
+        @Override
+        public Icon getIcon() {
             return null;
         }
 
-        log.info("Running query {}", query);
-        var facade = DatabaseSessionManager.facade(e.getProject(), (LocalDataSource) ((DbDataSource) element.get().getParent()).getDelegate(), null, null, null, databaseDepartment);
-        var client = facade.client();
-        var bus = client.getMessageBus();
-        var producer = bus.getDataProducer();
-        var result = new Query(e.getProject(), query);
-        producer.processRequest(result);
+        @Override
+        public boolean isInternal() {
+            return false;
+        }
 
-        result.getFuture().thenAccept(x -> client.dispose());
-        return result;
-    }
-
-    static {
-        databaseDepartment = new DatabaseDepartment() {
-            @Override
-            public String getDepartmentName() {
-                return "MSSQL Department name";
-            }
-
-            @Override
-            public String getCommonName() {
-                return "MSSQL Common name";
-            }
-
-            @Override
-            public Icon getIcon() {
-                return null;
-            }
-
-            @Override
-            public boolean isInternal() {
-                return false;
-            }
-
-            @Override
-            public boolean isService() {
-                return false;
-            }
-        };
-    }
+        @Override
+        public boolean isService() {
+            return false;
+        }
+    };
 }
