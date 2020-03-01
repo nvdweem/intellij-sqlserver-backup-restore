@@ -35,6 +35,7 @@ public class Connection implements AutoCloseable {
 
     public Connection takeOver() {
         if (closed) {
+            log.error("Unable to take over connection that is already closed");
             throw new IllegalStateException("Unable to take over connection that is already closed");
         }
         closed = true;
@@ -183,7 +184,7 @@ public class Connection implements AutoCloseable {
     }
 
     /**
-     * Keeps a reference to the statement close to the blob hoping that the Garbage Collector won't clean it
+     * Keeps everything that's needed to keep a blob alive next to the blob so they won't be garbage collected
      */
     @RequiredArgsConstructor
     public static class BlobWrapper implements AutoCloseable {
@@ -194,7 +195,11 @@ public class Connection implements AutoCloseable {
 
         @Override
         public void close() throws Exception {
-            blob.free();
+            try {
+                blob.free();
+            } catch (Exception e) {
+                // Freeing a blob can run into an AbstractMethodError, that sucks...
+            }
             wrapper.close();
         }
     }

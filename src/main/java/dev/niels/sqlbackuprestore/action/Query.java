@@ -4,7 +4,6 @@ import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.datagrid.DataRequest;
 import com.intellij.openapi.project.Project;
 import lombok.Getter;
-import lombok.ToString;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
@@ -14,7 +13,6 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @Getter
-@ToString(of = {"query", "values"})
 public class Query extends DataRequest.RawQueryRequest implements DataConsumer {
     private List<Column> columns;
     private List<Map<String, Object>> values = new ArrayList<>();
@@ -39,5 +37,13 @@ public class Query extends DataRequest.RawQueryRequest implements DataConsumer {
             }
             values.add(r);
         }
+    }
+
+    @Override
+    public String toString() {
+        return "Query{" +
+                "columns=" + columns +
+                ", query='" + query + '\'' +
+                '}';
     }
 }
