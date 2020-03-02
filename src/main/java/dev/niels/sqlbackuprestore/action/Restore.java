@@ -7,6 +7,7 @@ import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.ui.Messages;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Connection;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
@@ -34,7 +35,11 @@ public class Restore extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.connection(e)) {
-                var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null);
+                var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElseGet(this::promptDatabaseName);
+                if (target == null) {
+                    return;
+                }
+
                 var file = FileDialog.chooseFile(e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'");
                 if (StringUtils.isBlank(file)) {
                     return;
@@ -50,7 +55,11 @@ public class Restore extends AnAction {
                 }).afterFinish(newC::close).queue();
             }
         });
+    }
 
+    private String promptDatabaseName() {
+        var name = Messages.showInputDialog("Create a new database from backup", "Database name", null);
+        return StringUtils.stripToNull(name);
     }
 
     @RequiredArgsConstructor

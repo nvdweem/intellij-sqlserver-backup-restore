@@ -31,18 +31,26 @@ public abstract class QueryHelper {
         return Optional.ofNullable(element == null ? null : (DbNamespaceImpl) element);
     }
 
+    private static Optional<DbDataSource> getSource(@NotNull AnActionEvent e) {
+        var element = e.getData(CommonDataKeys.PSI_ELEMENT);
+        while (element != null && (!(element instanceof DbDataSource))) {
+            element = element.getParent();
+        }
+        return Optional.ofNullable(element == null ? null : (DbDataSource) element);
+    }
+
     public static Optional<MsDatabase> getDatabase(@NotNull AnActionEvent e) {
         return getNamespace(e).map(d -> (MsDatabase) d.getDelegate());
     }
 
     @SneakyThrows
     public static Connection connection(@NotNull AnActionEvent e) {
-        var element = getNamespace(e);
+        var element = getSource(e);
         if (element.isEmpty()) {
-            throw new IllegalStateException("There should be an element");
+            throw new IllegalStateException("There should be a datasource");
         }
 
-        var facade = DatabaseSessionManager.facade(e.getProject(), (LocalDataSource) ((DbDataSource) element.get().getParent()).getDelegate(), null, null, null, databaseDepartment);
+        var facade = DatabaseSessionManager.facade(e.getProject(), (LocalDataSource) ((DbDataSource) element.get()).getDelegate(), null, null, null, databaseDepartment);
         var ref = facade.connect();
         return new Connection(ref, ref.get().getRemoteConnection());
     }

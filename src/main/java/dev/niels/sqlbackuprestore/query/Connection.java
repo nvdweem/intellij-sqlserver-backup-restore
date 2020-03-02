@@ -218,11 +218,6 @@ public class Connection implements AutoCloseable {
 
         @Override
         public void close() {
-            try {
-                blob.free();
-            } catch (Exception e) {
-                // Freeing a blob can run into an AbstractMethodError, that sucks...
-            }
             wrapper.close();
         }
     }
