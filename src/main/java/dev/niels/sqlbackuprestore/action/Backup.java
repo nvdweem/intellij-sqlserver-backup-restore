@@ -44,8 +44,10 @@ public class Backup extends AnAction {
 
         var future = new CompletableFuture<Pair<Connection, String>>();
         var newC = c.takeOver();
+
+        var sql = "BACKUP DATABASE [%s] TO  DISK = N'%s' WITH  COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, COMPRESSION, STATS = 10";
         database.ifPresent(db -> new ProgressTask(e.getProject(), "Creating Backup", false,
-                consumer -> newC.withMessages(consumer).execute("BACKUP DATABASE [" + db.getName() + "] TO  DISK = N'" + target + "' WITH NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10"))
+                consumer -> newC.withMessages(consumer).execute(String.format(sql, db.getName(), target)))
                 .afterFinish(() -> future.complete(Pair.of(newC, target))).queue());
         return future;
     }
