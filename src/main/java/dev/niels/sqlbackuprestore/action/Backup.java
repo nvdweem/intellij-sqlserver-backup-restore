@@ -37,7 +37,11 @@ public class Backup extends AnAction {
      */
     protected CompletableFuture<Pair<Connection, String>> backup(@NotNull AnActionEvent e, Connection c) {
         var database = QueryHelper.getDatabase(e);
-        var target = FileDialog.chooseFile(e.getProject(), c, "Backup to file", "Select a file to backup '" + database + "' to");
+        if (database.isEmpty()) {
+            return CompletableFuture.completedFuture(Pair.of(c, null));
+        }
+
+        var target = FileDialog.chooseFile(e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to");
         if (StringUtils.isEmpty(target)) {
             return CompletableFuture.completedFuture(Pair.of(c, null));
         }
