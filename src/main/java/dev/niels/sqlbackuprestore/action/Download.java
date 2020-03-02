@@ -11,6 +11,7 @@ import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.ui.Messages;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Connection;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
@@ -39,11 +40,23 @@ public class Download extends AnAction {
                     }
 
                     var target = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(null, null).getFile();
-                    new DownloadTask(e.getProject(), p.getLeft().takeOver(), source, target).queue();
+                    var compress = askCompress(e.getProject());
+                    if (compress) {
+                        target = new File(target.getAbsolutePath() + ".gzip");
+                    }
+
+                    new DownloadTask(e.getProject(), p.getLeft().takeOver(), source, target, compress).queue();
                     return p.getLeft();
                 }).thenAccept(Connection::close);
             }
         });
+    }
+
+    private boolean askCompress(Project project) {
+        return Messages.YES == Messages.showYesNoDialog(project,
+                "Do you want to compress the file before downloading?",
+                "Compress?",
+                Messages.getQuestionIcon());
     }
 
     @Slf4j
@@ -52,23 +65,32 @@ public class Download extends AnAction {
         private final Connection connection;
         private final String path;
         private final File target;
+        private final boolean compress;
 
-        public DownloadTask(@Nullable Project project, Connection connection, String path, File target) {
+        public DownloadTask(@Nullable Project project, Connection connection, String path, File target, boolean compress) {
             super(project, "Downloading " + path);
             this.connection = connection;
             this.path = path;
             this.target = target;
+            this.compress = compress;
         }
 
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
             try (connection; var fos = new FileOutputStream(target)) {
-                indicator.setText(getTitle());
                 indicator.setIndeterminate(false);
                 indicator.setFraction(0.0);
 
+                var column = "BulkColumn";
+                if (compress) {
+                    column = "COMPRESS(BulkColumn) as BulkColumn";
+                    indicator.setText(String.format("Compressing '%s'", path));
+                } else {
+                    indicator.setText(getTitle());
+                }
+
                 connection.getSingle(Connection.BlobWrapper.class,
-                        "SELECT BulkColumn FROM OPENROWSET(BULK N'" + path + "', SINGLE_BLOB) rs", "BulkColumn")
+                        "SELECT " + column + " FROM OPENROWSET(BULK N'" + path + "', SINGLE_BLOB) rs", "BulkColumn")
                         .ifPresent(wrapper -> readBlobToFile(indicator, fos, wrapper));
             } catch (IOException e) {
                 Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
