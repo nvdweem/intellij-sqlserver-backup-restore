@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>dev.niels.SQLServerBackupAndRestore</id>
     <name>SQL Server backup and restore</name>
-    <vendor email="support@niels.dev" url="http://www.google.com">Niels</vendor>
+    <vendor email="support@niels.dev" url="https://github.com/nvdweem/intellij-sqlserver-backup-restore">Niels vd Weem</vendor>
 
     <description><![CDATA[
     A way to restore and create backups for Microsoft SQL Server from the DataGrip window.

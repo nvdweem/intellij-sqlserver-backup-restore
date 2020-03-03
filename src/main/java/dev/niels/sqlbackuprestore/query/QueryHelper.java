@@ -50,7 +50,7 @@ public abstract class QueryHelper {
             throw new IllegalStateException("There should be a datasource");
         }
 
-        var facade = DatabaseSessionManager.facade(e.getProject(), (LocalDataSource) ((DbDataSource) element.get()).getDelegate(), null, null, null, databaseDepartment);
+        var facade = DatabaseSessionManager.facade(e.getProject(), (LocalDataSource) element.get().getDelegate(), null, null, null, databaseDepartment);
         var ref = facade.connect();
         return new Connection(ref, ref.get().getRemoteConnection());
     }
