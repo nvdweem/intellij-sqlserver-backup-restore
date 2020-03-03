@@ -18,7 +18,6 @@
             <action id="backup" class="dev.niels.sqlbackuprestore.action.Backup" text="Backup" description="Backup from bak file"/>
             <action id="download" class="dev.niels.sqlbackuprestore.action.Download" text="Backup and Download" description="Backup database and then download the file"/>
             <action id="restore" class="dev.niels.sqlbackuprestore.action.Restore" text="Restore" description="Restore from bak file"/>
-            <action id="drop" class="dev.niels.sqlbackuprestore.action.Drop" text="Drop" description="Drop database"/>
         </group>
     </actions>
 
