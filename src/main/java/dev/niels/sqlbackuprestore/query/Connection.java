@@ -54,10 +54,12 @@ public class Connection implements AutoCloseable {
 
     @Override
     public void close() {
-        set(null);
         if (closed) {
+            set(null);
             return;
         }
+        execute("use master");
+        set(null);
         closed = true;
         ref.close();
     }
