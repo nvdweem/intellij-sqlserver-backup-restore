@@ -273,7 +273,13 @@ public class FileDialog {
 
         @Override
         public void refresh(boolean asynchronous, boolean recursive, @Nullable Runnable postRunnable) {
-            // Refreshing not needed
+            if (children != null) {
+                children = null;
+                getChildren();
+                if (postRunnable != null) {
+                    postRunnable.run();
+                }
+            }
         }
 
         @Override
