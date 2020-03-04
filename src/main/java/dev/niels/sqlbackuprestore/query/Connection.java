@@ -107,7 +107,7 @@ public class Connection implements AutoCloseable {
             List<Map<String, Object>> result = new ArrayList<>();
             while (rs.next()) {
                 Map<String, Object> row = new HashMap<>();
-                for (int i = 1; i < rs.getMetaData().getColumnCount(); i++) {
+                for (int i = 1; i <= rs.getMetaData().getColumnCount(); i++) {
                     row.put(rs.getMetaData().getColumnName(i), rs.getObject(i));
                 }
                 result.add(row);

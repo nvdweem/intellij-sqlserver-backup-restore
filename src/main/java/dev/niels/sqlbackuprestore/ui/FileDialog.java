@@ -245,7 +245,7 @@ public class FileDialog {
         @Override
         public VirtualFile[] getChildren() {
             if (children == null) {
-                children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").map(rs -> rs.stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new)).orElse(new RemoteFile[0]);
+                children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").map(rs -> rs.stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new)).orElse(new RemoteFile[0]);
             }
             return children;
         }
