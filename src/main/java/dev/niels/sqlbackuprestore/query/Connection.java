@@ -1,12 +1,11 @@
 package dev.niels.sqlbackuprestore.query;
 
-import com.intellij.database.dataSource.DatabaseConnection;
+import com.intellij.database.access.ConnectionProvider;
 import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.database.remote.jdbc.RemoteConnection;
 import com.intellij.database.remote.jdbc.RemoteResultSet;
 import com.intellij.database.remote.jdbc.RemoteStatement;
 import com.intellij.database.remote.jdbc.impl.ReflectionHelper;
-import com.intellij.database.util.GuardedRef;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -34,34 +33,34 @@ import java.util.function.Consumer;
 @RequiredArgsConstructor
 @Slf4j
 public class Connection implements AutoCloseable {
-    private final GuardedRef<DatabaseConnection> ref;
+    private final ConnectionProvider provider;
     private final RemoteConnection remoteConnection;
     private Consumer<SQLWarning> warningConsumer;
     private RemoteStatement statement;
     private boolean closed = false;
 
     /**
-     * Pretend that the current connection is closed and return a new connection that isn't closed.
+     * Retrieve a new connection from the current one
      */
-    public Connection takeOver() {
-        if (closed) {
-            log.error("Unable to take over connection that is already closed");
-            throw new IllegalStateException("Unable to take over connection that is already closed");
+    public Connection getNew() {
+        if (!provider.acquire()) {
+            log.error("Unable to acquire connection");
+            throw new IllegalStateException("Unable to acquire connection");
         }
-        closed = true;
-        return new Connection(ref, remoteConnection);
+        return new Connection(provider, provider.getConnection().getRemoteConnection());
     }
 
     @Override
     public void close() {
         if (closed) {
+            log.error("Closing a connection multiple times");
             set(null);
             return;
         }
         execute("use master");
         set(null);
         closed = true;
-        ref.close();
+        provider.release();
     }
 
     /**

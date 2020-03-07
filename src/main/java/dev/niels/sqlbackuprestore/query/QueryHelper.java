@@ -1,7 +1,6 @@
 package dev.niels.sqlbackuprestore.query;
 
-import com.intellij.database.console.session.DatabaseSessionManager;
-import com.intellij.database.dataSource.LocalDataSource;
+import com.intellij.database.access.ConnectionProvider;
 import com.intellij.database.dataSource.connection.DatabaseDepartment;
 import com.intellij.database.dialects.mssql.model.MsDatabase;
 import com.intellij.database.psi.DbDataSource;
@@ -50,11 +49,12 @@ public abstract class QueryHelper {
             throw new IllegalStateException("There should be a datasource");
         }
 
-        var dataSource = (LocalDataSource) element.get().getDelegate();
-        var facade = DatabaseSessionManager.facade(e.getProject(), dataSource, null, null, null, databaseDepartment);
-        facade.getDataSource().setAutoClose(true);
-        var ref = facade.connect();
-        return new Connection(ref, ref.get().getRemoteConnection());
+        var connectionProvider = ConnectionProvider.forElement(element.get(), databaseDepartment);
+        if (connectionProvider.acquire()) {
+            return new Connection(connectionProvider, connectionProvider.getConnection().getRemoteConnection());
+        }
+        log.error("Unable to acquire connection");
+        return null;
     }
 
     private static DatabaseDepartment databaseDepartment = new DatabaseDepartment() {

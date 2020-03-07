@@ -33,10 +33,11 @@ public class Download extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.connection(e)) {
-                new Backup().backup(e, c).thenApply(p -> {
-                    var source = p.getRight();
+                var innerConnection = c.getNew();
+                new Backup().backup(e, c).thenAccept(source -> {
                     if (StringUtils.isEmpty(source)) {
-                        return p.getLeft();
+                        innerConnection.close();
+                        return;
                     }
 
                     var target = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(null, null).getFile();
@@ -45,9 +46,8 @@ public class Download extends AnAction {
                         target = new File(target.getAbsolutePath() + ".gzip");
                     }
 
-                    new DownloadTask(e.getProject(), p.getLeft().takeOver(), source, target, compress).queue();
-                    return p.getLeft();
-                }).thenAccept(Connection::close);
+                    new DownloadTask(e.getProject(), innerConnection, source, target, compress).queue();
+                });
             }
         });
     }

@@ -9,7 +9,6 @@ import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CompletableFuture;
@@ -23,7 +22,7 @@ public class Backup extends AnAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.connection(e)) {
-                backup(e, c).thenApply(Pair::getLeft).thenAccept(Connection::close);
+                backup(e, c);
             }
         });
     }
@@ -35,22 +34,22 @@ public class Backup extends AnAction {
      * @param c the connection that should be used for backing up (will be taken over if a backup is being made, close it from the future as well).
      * @return a pair of the connection that should be closed and the file that was being selected. The original connection and null if no file was selected.
      */
-    protected CompletableFuture<Pair<Connection, String>> backup(@NotNull AnActionEvent e, Connection c) {
+    protected CompletableFuture<String> backup(@NotNull AnActionEvent e, Connection c) {
         var database = QueryHelper.getDatabase(e);
         if (database.isEmpty()) {
-            return CompletableFuture.completedFuture(Pair.of(c, null));
+            return CompletableFuture.completedFuture(null);
         }
 
         var target = FileDialog.chooseFile(e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to");
         if (StringUtils.isEmpty(target)) {
-            return CompletableFuture.completedFuture(Pair.of(c, null));
+            return CompletableFuture.completedFuture(null);
         }
 
-        var future = new CompletableFuture<Pair<Connection, String>>();
-        var newC = c.takeOver();
+        var future = new CompletableFuture<String>();
+        var newC = c.getNew();
         database.ifPresent(db -> new ProgressTask(e.getProject(), "Creating Backup", false,
                 consumer -> newC.withMessages(consumer).execute("BACKUP DATABASE [" + db.getName() + "] TO  DISK = N'" + target + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10"))
-                .afterFinish(() -> future.complete(Pair.of(newC, target))).queue());
+                .afterFinish(newC::close).queue());
         return future;
     }
 }

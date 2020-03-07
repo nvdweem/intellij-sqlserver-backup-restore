@@ -45,14 +45,14 @@ public class Restore extends AnAction {
                     return;
                 }
 
-                var newC = c.takeOver();
+                var newC = c.getNew();
                 new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
-                    try (var helper = new RestoreHelper(e, target, file, consumer)) {
-                        helper.restore();
+                    try (newC) {
+                        new RestoreHelper(newC, target, file, consumer).restore();
                     } catch (Exception ex) {
                         log.error("Unable to restore database", ex);
                     }
-                }).afterFinish(newC::close).queue();
+                }).queue();
             }
         });
     }
@@ -64,28 +64,14 @@ public class Restore extends AnAction {
 
     @RequiredArgsConstructor
     @Slf4j
-    private static class RestoreHelper implements AutoCloseable {
-        private final AnActionEvent e;
+    private static class RestoreHelper {
+        private final Connection connection;
         private final String target;
         private final String file;
         private final Consumer<SQLWarning> progressConsumer;
         private final Map<String, Integer> uniqueNames = new HashMap<>();
-        private Connection connection;
-
-        @Override
-        public void close() {
-            if (connection != null) {
-                try {
-                    connection.close();
-                } catch (Exception ex) {
-                    log.error("Unable to close connection", ex);
-                }
-            }
-        }
 
         public void restore() {
-            connection = QueryHelper.connection(e);
-
             connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
                     .flatMap(this::createRestoreQuery)
                     .ifPresent(sql -> connection.withMessages(this::progress).execute(sql));

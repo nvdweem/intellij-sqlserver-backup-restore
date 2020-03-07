@@ -23,6 +23,8 @@ intellij {
     downloadSources true
 }
 patchPluginXml {
+    sinceBuild = '201.0'
+    untilBuild = ''
     changeNotes """
       A way to restore and create backups for Microsoft SQL Server"""
 }
