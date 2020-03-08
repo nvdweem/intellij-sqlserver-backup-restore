@@ -1,6 +1,8 @@
 package dev.niels.sqlbackuprestore.action;
 
+import com.intellij.database.actions.RefreshSchemaAction;
 import com.intellij.database.model.DasObject;
+import com.intellij.database.view.DatabaseView;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
@@ -47,7 +49,9 @@ public class Restore extends AnAction implements DumbAware {
 
                 c.open();
                 new ProgressTask(e.getProject(), "Restore backup", false, consumer ->
-                        new RestoreHelper(c, target, file, consumer).restore().thenRun(c::close).exceptionally(c::close)
+                        new RestoreHelper(c, target, file, consumer).restore()
+                                .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
+                                .thenRun(c::close).exceptionally(c::close)
                 ).queue();
             }
         });
