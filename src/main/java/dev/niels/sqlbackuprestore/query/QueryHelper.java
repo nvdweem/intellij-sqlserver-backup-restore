@@ -8,13 +8,20 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 /**
  * Helper to go from actions to table names or connections.
  */
-public interface QueryHelper {
-    static boolean isMssql(@NotNull AnActionEvent e) {
+public abstract class QueryHelper {
+    private static List<Client> clients = new ArrayList<>();
+
+    private QueryHelper() {
+    }
+
+    public static boolean isMssql(@NotNull AnActionEvent e) {
         return QueryHelper.getSource(e).map(ds -> ds.getDbms().isMicrosoft()).orElse(false);
     }
 
@@ -34,11 +41,18 @@ public interface QueryHelper {
         return Optional.ofNullable(element == null ? null : (DbDataSource) element);
     }
 
-    static Optional<MsDatabase> getDatabase(@NotNull AnActionEvent e) {
+    public static Optional<MsDatabase> getDatabase(@NotNull AnActionEvent e) {
         return getNamespace(e).map(d -> (MsDatabase) d.getDelegate());
     }
 
-    static Client client(@NotNull AnActionEvent e) {
-        return new Client(e.getProject(), (LocalDataSource) (getSource(e).orElseThrow()).getDelegate());
+    public static Client client(@NotNull AnActionEvent e) {
+        cleanOldClients();
+        var client = new Client(e.getProject(), (LocalDataSource) (getSource(e).orElseThrow()).getDelegate());
+        clients.add(client);
+        return client;
+    }
+
+    public static void cleanOldClients() {
+        clients.forEach(Client::cleanIfDone);
     }
 }

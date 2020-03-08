@@ -6,6 +6,7 @@ import com.intellij.database.dataSource.LocalDataSource;
 import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.datagrid.DataRequest;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.util.Disposer;
 import dev.niels.sqlbackuprestore.Constants;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -74,6 +75,18 @@ public class Client implements AutoCloseable {
     public void close() {
         if (--useCount == 0) {
             done();
+        }
+    }
+
+    public void cleanIfDone() {
+        if (!dbClient.getSession().isConnected()) {
+            var session = dbClient.getSession();
+            DatabaseSessionClient[] clients = session.getClients();
+            for (int idx = 0; idx < clients.length; ++idx) {
+                DatabaseSessionClient client = clients[idx];
+                session.detach(client);
+            }
+            Disposer.dispose(session);
         }
     }
 
