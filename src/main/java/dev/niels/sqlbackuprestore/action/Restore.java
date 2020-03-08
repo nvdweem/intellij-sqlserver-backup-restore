@@ -1,28 +1,26 @@
 package dev.niels.sqlbackuprestore.action;
 
 import com.intellij.database.model.DasObject;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
+import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.ui.Messages;
-import dev.niels.sqlbackuprestore.Constants;
-import dev.niels.sqlbackuprestore.query.Connection;
+import dev.niels.sqlbackuprestore.query.Auditor;
+import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
-import java.sql.SQLWarning;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -30,11 +28,11 @@ import java.util.stream.Collectors;
  * Restore a database from a (remote) file. Cannot be a gzipped file.
  */
 @Slf4j
-public class Restore extends AnAction {
+public class Restore extends AnAction implements DumbAware {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
-            try (var c = QueryHelper.connection(e)) {
+            try (var c = QueryHelper.client(e)) {
                 var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElseGet(this::promptDatabaseName);
                 if (target == null) {
                     return;
@@ -45,14 +43,10 @@ public class Restore extends AnAction {
                     return;
                 }
 
-                var newC = c.getNew();
-                new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
-                    try (newC) {
-                        new RestoreHelper(newC, target, file, consumer).restore();
-                    } catch (Exception ex) {
-                        log.error("Unable to restore database", ex);
-                    }
-                }).queue();
+                c.open();
+                new ProgressTask(e.getProject(), "Restore backup", false, consumer ->
+                        new RestoreHelper(c, target, file, consumer).restore().thenRun(c::close).exceptionally(c::close)
+                ).queue();
             }
         });
     }
@@ -65,21 +59,23 @@ public class Restore extends AnAction {
     @RequiredArgsConstructor
     @Slf4j
     private static class RestoreHelper {
-        private final Connection connection;
+        private final Client connection;
         private final String target;
         private final String file;
-        private final Consumer<SQLWarning> progressConsumer;
+        private final Consumer<Pair<Auditor.MessageType, String>> progressConsumer;
         private final Map<String, Integer> uniqueNames = new HashMap<>();
 
-        public void restore() {
-            connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
-                    .flatMap(this::createRestoreQuery)
-                    .ifPresent(sql -> connection.withMessages(this::progress).execute(sql));
+        public CompletableFuture<Void> restore() {
+            return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
+                    .thenCompose(this::createRestoreQuery)
+                    .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
+                    .thenApply(x -> null);
         }
 
-        private Optional<String> createRestoreQuery(List<Map<String, Object>> maps) {
-            return determineTargetPath().map(path -> maps.stream().map(v -> determineFileName(path, v)).collect(Collectors.joining(",")))
-                    .map(moves -> String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, %s, NOUNLOAD, STATS = 5, REPLACE", target, file, moves));
+        private CompletableFuture<String> createRestoreQuery(List<Map<String, Object>> maps) {
+            return determineTargetPath()
+                    .thenApply(path -> maps.stream().map(v -> determineFileName(path, v)).collect(Collectors.joining(",")))
+                    .thenApply(moves -> String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, %s, NOUNLOAD, STATS = 5, REPLACE", target, file, moves));
         }
 
         private String determineFileName(String path, Map<String, Object> values) {
@@ -98,7 +94,7 @@ public class Restore extends AnAction {
             return target + "_" + count + ext;
         }
 
-        private Optional<String> determineTargetPath() {
+        private CompletableFuture<String> determineTargetPath() {
             var path = "LEFT(physical_name,LEN(physical_name)-CHARINDEX('\\',REVERSE(physical_name))+1)";
             var pathQuery = "SELECT top 1 " + path + " path, count(*)\n" +
                     "    FROM sys.master_files mf\n" +
@@ -106,15 +102,11 @@ public class Restore extends AnAction {
                     "group by " + path + "\n" +
                     "order by count(*) desc;";
 
-            return connection.getSingle(String.class, pathQuery, "path");
+            return connection.getSingle(pathQuery, "path");
         }
 
-        private void progress(SQLWarning warning) {
-            if (warning.getErrorCode() == -1) {
-                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to restore " + target, warning.getCause().getMessage(), NotificationType.ERROR));
-            } else {
-                progressConsumer.accept(warning);
-            }
+        private void progress(Pair<Auditor.MessageType, String> warning) {
+            progressConsumer.accept(warning);
         }
     }
 }

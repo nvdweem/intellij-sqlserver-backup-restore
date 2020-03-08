@@ -9,8 +9,9 @@ import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileSystem;
-import dev.niels.sqlbackuprestore.query.Connection;
+import dev.niels.sqlbackuprestore.query.Client;
 import lombok.RequiredArgsConstructor;
+import lombok.SneakyThrows;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -20,6 +21,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * File dialog to show remote files from SQLServer.
@@ -27,14 +29,14 @@ import java.util.List;
 @RequiredArgsConstructor
 public class FileDialog {
     private final Project project;
-    private final Connection connection;
+    private final Client connection;
     private final String title;
     private final String description;
 
     /**
      * Open the file dialog to show files from the connection.
      */
-    public static String chooseFile(Project project, Connection c, String title, String description) {
+    public static String chooseFile(Project project, Client c, String title, String description) {
         return new FileDialog(project, c, title, description).choose();
     }
 
@@ -110,8 +112,9 @@ public class FileDialog {
      * Lists files from the connection
      */
     private class DatabaseFileSystem extends VirtualFileSystem {
+        @SneakyThrows
         public VirtualFile[] getRoots() {
-            return connection.getResult("EXEC master..xp_fixeddrives").map(rs -> rs.stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true)).toArray(RemoteFile[]::new)).orElse(new RemoteFile[0]);
+            return connection.getResult("EXEC master..xp_fixeddrives").get(10, TimeUnit.SECONDS).stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true)).toArray(RemoteFile[]::new);
         }
 
         @NotNull
@@ -242,10 +245,11 @@ public class FileDialog {
             return parent;
         }
 
+        @SneakyThrows
         @Override
         public VirtualFile[] getChildren() {
             if (children == null) {
-                children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").map(rs -> rs.stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new)).orElse(new RemoteFile[0]);
+                children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").get(10, TimeUnit.SECONDS).stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new);
             }
             return children;
         }

@@ -4,11 +4,11 @@ import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.Project;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.Nls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.sql.SQLWarning;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
@@ -18,23 +18,12 @@ import java.util.regex.Pattern;
 @Slf4j
 public class ProgressTask extends Task.Backgroundable {
     private static final Pattern progressPattern = Pattern.compile("\\d+");
-    private final Consumer<Consumer<SQLWarning>> run;
+    private final Consumer<Consumer<Pair<Auditor.MessageType, String>>> run;
     private ProgressIndicator indicator;
-    private Runnable afterFinish;
 
-    public ProgressTask(@Nullable Project project, @Nls(capitalization = Nls.Capitalization.Title) @NotNull String title, boolean canBeCancelled, Consumer<Consumer<SQLWarning>> run) {
+    public ProgressTask(@Nullable Project project, @Nls(capitalization = Nls.Capitalization.Title) @NotNull String title, boolean canBeCancelled, Consumer<Consumer<Pair<Auditor.MessageType, String>>> run) {
         super(project, title, canBeCancelled);
         this.run = run;
-    }
-
-    public ProgressTask afterFinish(Runnable r) {
-        afterFinish = r;
-        return this;
-    }
-
-    @Override
-    public void onFinished() {
-        afterFinish.run();
     }
 
     @Override
@@ -47,14 +36,14 @@ public class ProgressTask extends Task.Backgroundable {
         run.accept(this::consumeWarning);
     }
 
-    private void consumeWarning(SQLWarning warning) {
-        if (warning.getErrorCode() == 3211) {
-            var matcher = progressPattern.matcher(warning.getMessage());
+    private void consumeWarning(Pair<Auditor.MessageType, String> warning) {
+        if (warning.getLeft() == Auditor.MessageType.WARN && warning.getRight().contains("3211")) {
+            var matcher = progressPattern.matcher(warning.getRight());
             if (matcher.find()) {
                 indicator.setFraction(Integer.parseInt(matcher.group()) / 100d);
             }
         } else {
-            log.warn("Warning: {}:{}", warning.getErrorCode(), warning.getMessage());
+            log.warn("Warning: {}:{}", warning.getLeft(), warning.getRight());
         }
     }
 }

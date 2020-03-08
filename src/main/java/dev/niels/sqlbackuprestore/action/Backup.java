@@ -3,7 +3,8 @@ package dev.niels.sqlbackuprestore.action;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
-import dev.niels.sqlbackuprestore.query.Connection;
+import com.intellij.openapi.project.DumbAware;
+import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
@@ -17,11 +18,11 @@ import java.util.concurrent.CompletableFuture;
  * Backup database to a file
  */
 @Slf4j
-public class Backup extends AnAction {
+public class Backup extends AnAction implements DumbAware {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
-            try (var c = QueryHelper.connection(e)) {
+            try (var c = QueryHelper.client(e).open()) {
                 backup(e, c);
             }
         });
@@ -29,12 +30,13 @@ public class Backup extends AnAction {
 
     /**
      * Asks for a (remote) file and backs the selected database up to that file.
+     * Must be called on the event thread.
      *
      * @param e the event that triggered the action (the database is retrieved from the action)
      * @param c the connection that should be used for backing up (will be taken over if a backup is being made, close it from the future as well).
      * @return a pair of the connection that should be closed and the file that was being selected. The original connection and null if no file was selected.
      */
-    protected CompletableFuture<String> backup(@NotNull AnActionEvent e, Connection c) {
+    protected CompletableFuture<String> backup(@NotNull AnActionEvent e, Client c) {
         var database = QueryHelper.getDatabase(e);
         if (database.isEmpty()) {
             return CompletableFuture.completedFuture(null);
@@ -45,11 +47,13 @@ public class Backup extends AnAction {
             return CompletableFuture.completedFuture(null);
         }
 
-        var future = new CompletableFuture<String>();
-        var newC = c.getNew();
-        database.ifPresent(db -> new ProgressTask(e.getProject(), "Creating Backup", false,
-                consumer -> newC.withMessages(consumer).execute("BACKUP DATABASE [" + db.getName() + "] TO  DISK = N'" + target + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10"))
-                .afterFinish(newC::close).queue());
+        c.open();
+        var future = c.execute("BACKUP DATABASE [" + database.get().getName() + "] TO  DISK = N'" + target + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
+                .thenApply(c::closeAndReturn)
+                .exceptionally(c::close)
+                .thenApply(x -> target);
+
+        new ProgressTask(e.getProject(), "Creating Backup", false, c::addWarningConsumer).queue();
         return future;
     }
 }

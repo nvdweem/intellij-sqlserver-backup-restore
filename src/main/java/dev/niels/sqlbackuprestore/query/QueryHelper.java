@@ -1,17 +1,14 @@
 package dev.niels.sqlbackuprestore.query;
 
-import com.intellij.database.access.ConnectionProvider;
-import com.intellij.database.dataSource.connection.DatabaseDepartment;
+import com.intellij.database.dataSource.LocalDataSource;
 import com.intellij.database.dialects.mssql.model.MsDatabase;
 import com.intellij.database.psi.DbDataSource;
 import com.intellij.database.psi.DbNamespaceImpl;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
-import javax.swing.Icon;
 import java.util.Optional;
 
 /**
@@ -42,45 +39,7 @@ public abstract class QueryHelper {
         return getNamespace(e).map(d -> (MsDatabase) d.getDelegate());
     }
 
-    @SneakyThrows
-    public static Connection connection(@NotNull AnActionEvent e) {
-        var element = getSource(e);
-        if (element.isEmpty()) {
-            throw new IllegalStateException("There should be a datasource");
-        }
-
-        var connectionProvider = ConnectionProvider.forElement(element.get(), databaseDepartment);
-        if (connectionProvider.acquire()) {
-            return new Connection(connectionProvider, connectionProvider.getConnection().getRemoteConnection());
-        }
-        log.error("Unable to acquire connection");
-        return null;
+    public static Client client(@NotNull AnActionEvent e) {
+        return new Client(e.getProject(), (LocalDataSource) (getSource(e).orElseThrow()).getDelegate());
     }
-
-    private static DatabaseDepartment databaseDepartment = new DatabaseDepartment() {
-        @Override
-        public String getDepartmentName() {
-            return "MSSQL Department name";
-        }
-
-        @Override
-        public String getCommonName() {
-            return "MSSQL Common name";
-        }
-
-        @Override
-        public Icon getIcon() {
-            return null;
-        }
-
-        @Override
-        public boolean isInternal() {
-            return false;
-        }
-
-        @Override
-        public boolean isService() {
-            return false;
-        }
-    };
 }
