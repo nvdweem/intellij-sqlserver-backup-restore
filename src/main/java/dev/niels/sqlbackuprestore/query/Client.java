@@ -59,7 +59,7 @@ public class Client implements AutoCloseable {
     }
 
     private CompletableFuture<List<Map<String, Object>>> getResult(String query, Consumer<Pair<List<DataConsumer.Column>, List<DataConsumer.Row>>> consumer) {
-        var table = new Query(dbClient, query, consumer);
+        var table = new Query(this, dbClient, query, consumer);
         dbClient.getMessageBus().getDataProducer().processRequest(table);
         return table.getFuture();
     }
