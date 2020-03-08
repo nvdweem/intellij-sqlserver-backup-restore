@@ -7,6 +7,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -24,7 +25,7 @@ public class Query extends DataRequest.RawQueryRequest {
     protected Query(Client c, OwnerEx owner, String query, Consumer<Pair<List<Column>, List<Row>>> consumer) {
         super(owner, query, DataRequest.newConstraints(0, 5000, 0, 0));
         this.consumer = consumer;
-        
+
         c.open();
         getPromise().onProcessed(x -> {
             future.complete(result);
@@ -47,7 +48,7 @@ public class Query extends DataRequest.RawQueryRequest {
         if (consumer != null) {
             consumer.accept(Pair.of(columns, list));
         }
-        result.addAll(list.stream().map(r -> columns.stream().collect(Collectors.toMap(c -> c.name, c -> c.getValue(r)))).collect(Collectors.toList()));
+        result.addAll(list.stream().map(r -> columns.stream().collect(HashMap<String, Object>::new, (m, v) -> m.put(v.name, v.getValue(r)), HashMap::putAll)).collect(Collectors.toList()));
     }
 
     @Override
