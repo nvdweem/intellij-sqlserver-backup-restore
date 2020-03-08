@@ -21,6 +21,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * File dialog to show remote files from SQLServer.
@@ -119,7 +120,7 @@ public class FileDialog {
     private class DatabaseFileSystem extends VirtualFileSystem {
         @SneakyThrows
         public VirtualFile[] getRoots() {
-            return connection.getResult("EXEC master..xp_fixeddrives").join().stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true)).toArray(RemoteFile[]::new);
+            return connection.getResult("EXEC master..xp_fixeddrives").get(10, TimeUnit.SECONDS).stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true)).toArray(RemoteFile[]::new);
         }
 
         @NotNull
@@ -255,7 +256,7 @@ public class FileDialog {
         public VirtualFile[] getChildren() {
             if (children == null) {
                 if (isDirectory()) {
-                    children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").join().stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new);
+                    children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").get(10, TimeUnit.SECONDS).stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new);
                 } else {
                     children = new VirtualFile[]{};
                 }
