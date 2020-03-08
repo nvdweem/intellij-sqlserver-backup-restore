@@ -8,6 +8,6 @@ import org.jetbrains.annotations.NotNull;
 public class Group extends DefaultActionGroup {
     @Override
     public void update(@NotNull AnActionEvent e) {
-        e.getPresentation().setVisible(QueryHelper.isMssql(e));
+        e.getPresentation().setEnabledAndVisible(QueryHelper.isMssql(e));
     }
 }
