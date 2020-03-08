@@ -22,7 +22,7 @@ public class Backup extends AnAction implements DumbAware {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
-            try (var c = QueryHelper.client(e).open()) {
+            try (var c = QueryHelper.client(e)) {
                 c.setTitle("Backup database");
                 backup(e, c);
             }
