@@ -51,6 +51,11 @@ public class Restore extends AnAction implements DumbAware {
         });
     }
 
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+        e.getPresentation().setEnabled(QueryHelper.isMssql(e));
+    }
+
     private String promptDatabaseName() {
         var name = Messages.showInputDialog("Create a new database from backup", "Database name", null);
         return StringUtils.stripToNull(name);

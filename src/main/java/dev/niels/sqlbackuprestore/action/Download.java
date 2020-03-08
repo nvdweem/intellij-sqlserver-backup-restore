@@ -59,6 +59,11 @@ public class Download extends AnAction implements DumbAware {
         }
     }
 
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+        e.getPresentation().setEnabled(QueryHelper.getDatabase(e).isPresent());
+    }
+
     private boolean askCompress(Project project) {
         return Messages.YES == Messages.showYesNoDialog(project,
                 "Do you want to compress the file before downloading?",

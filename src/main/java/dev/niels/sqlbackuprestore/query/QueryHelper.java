@@ -6,7 +6,6 @@ import com.intellij.database.psi.DbDataSource;
 import com.intellij.database.psi.DbNamespaceImpl;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
-import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Optional;
@@ -14,9 +13,9 @@ import java.util.Optional;
 /**
  * Helper to go from actions to table names or connections.
  */
-@Slf4j
-public abstract class QueryHelper {
-    private QueryHelper() {
+public interface QueryHelper {
+    static boolean isMssql(@NotNull AnActionEvent e) {
+        return QueryHelper.getSource(e).map(ds -> ds.getDbms().isMicrosoft()).orElse(false);
     }
 
     private static Optional<DbNamespaceImpl> getNamespace(@NotNull AnActionEvent e) {
@@ -35,11 +34,11 @@ public abstract class QueryHelper {
         return Optional.ofNullable(element == null ? null : (DbDataSource) element);
     }
 
-    public static Optional<MsDatabase> getDatabase(@NotNull AnActionEvent e) {
+    static Optional<MsDatabase> getDatabase(@NotNull AnActionEvent e) {
         return getNamespace(e).map(d -> (MsDatabase) d.getDelegate());
     }
 
-    public static Client client(@NotNull AnActionEvent e) {
+    static Client client(@NotNull AnActionEvent e) {
         return new Client(e.getProject(), (LocalDataSource) (getSource(e).orElseThrow()).getDelegate());
     }
 }

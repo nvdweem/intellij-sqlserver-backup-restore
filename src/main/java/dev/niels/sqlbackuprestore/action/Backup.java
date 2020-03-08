@@ -28,6 +28,11 @@ public class Backup extends AnAction implements DumbAware {
         });
     }
 
+    @Override
+    public void update(@NotNull AnActionEvent e) {
+        e.getPresentation().setEnabled(QueryHelper.getDatabase(e).isPresent());
+    }
+
     /**
      * Asks for a (remote) file and backs the selected database up to that file.
      * Must be called on the event thread.
