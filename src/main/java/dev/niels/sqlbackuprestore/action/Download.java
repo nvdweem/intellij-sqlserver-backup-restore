@@ -28,6 +28,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.sql.SQLException;
 import java.util.List;
 
 /**
@@ -101,7 +102,7 @@ public class Download extends AnAction implements DumbAware {
                     indicator.setText(getTitle());
                 }
 
-                connection.withRows("SELECT " + column + " FROM OPENROWSET(BULK N'" + path + "', SINGLE_BLOB) rs", r -> readBlobToFile(indicator, fos, r))
+                connection.withRows("SELECT BulkColumn, LEN(BulkColumn) AS size FROM (SELECT " + column + " FROM OPENROWSET(BULK N'" + path + "', SINGLE_BLOB) rs) r", r -> readBlobToFile(indicator, fos, r))
                         .thenRun(connection::close)
                         .exceptionally(connection::close)
                         .thenRun(() -> cleanIfCancelled(indicator))
@@ -123,20 +124,37 @@ public class Download extends AnAction implements DumbAware {
 
         private void readBlobToFile(@NotNull ProgressIndicator indicator, FileOutputStream fos, Pair<List<DataConsumer.Column>, List<DataConsumer.Row>> rows) {
             try {
-                var blob = ((RemoteBlob) rows.getRight().get(0).getValue(0));
-                var size = blob.length();
-                long position = 1;
-                while (position < size && !indicator.isCanceled()) {
-                    fos.write(blob.getBytes(position, CHUNK_SIZE));
-                    fos.flush();
-                    position += CHUNK_SIZE;
-                    position = Math.min(size, position);
-                    indicator.setFraction((double) position / size);
-                    indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(position), Util.humanReadableByteCountSI(size)));
+                var blob = rows.getRight().get(0).getValue(0);
+                var size = ((Long) rows.getRight().get(0).getValue(1));
+
+                if (blob instanceof RemoteBlob) {
+                    saveBlob(indicator, fos, (RemoteBlob) blob, size);
+                } else if (blob instanceof byte[]) {
+                    saveBArr(indicator, fos, (byte[]) blob);
+                } else {
+                    Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Failed to download", "Unable to download column of type " + blob.getClass().getName(), NotificationType.ERROR));
                 }
+                indicator.setFraction(1);
             } catch (Exception e) {
                 log.error("Error occurred while downloading", e);
                 Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Failed to download", "The download failed with message:\n" + e.getMessage(), NotificationType.ERROR));
+            }
+        }
+
+        private void saveBArr(ProgressIndicator indicator, FileOutputStream fos, byte[] blob) throws IOException {
+            indicator.setIndeterminate(false);
+            fos.write(blob);
+        }
+
+        private void saveBlob(ProgressIndicator indicator, FileOutputStream fos, RemoteBlob blob, long size) throws IOException, SQLException {
+            long position = 1;
+            while (position < size && !indicator.isCanceled()) {
+                fos.write(blob.getBytes(position, CHUNK_SIZE));
+                fos.flush();
+                position += CHUNK_SIZE;
+                position = Math.min(size, position);
+                indicator.setFraction((double) position / size);
+                indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(position), Util.humanReadableByteCountSI(size)));
             }
         }
     }
