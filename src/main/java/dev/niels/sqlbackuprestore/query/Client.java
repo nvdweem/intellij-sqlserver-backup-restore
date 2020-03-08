@@ -3,13 +3,12 @@ package dev.niels.sqlbackuprestore.query;
 import com.intellij.database.console.client.DatabaseSessionClient;
 import com.intellij.database.console.session.DatabaseSessionManager;
 import com.intellij.database.dataSource.LocalDataSource;
-import com.intellij.database.dataSource.connection.DatabaseDepartment;
 import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.datagrid.DataRequest;
 import com.intellij.openapi.project.Project;
+import dev.niels.sqlbackuprestore.Constants;
 import org.apache.commons.lang3.tuple.Pair;
 
-import javax.swing.Icon;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -20,37 +19,14 @@ public class Client implements AutoCloseable {
     private final Auditor auditor;
     private int useCount = 1;
 
-    public Client open() {
-        ++useCount;
-        return this;
-    }
-
-    @Override
-    public void close() {
-        if (--useCount == 0) {
-            done();
-        }
-    }
-
-    /**
-     * Can be used in the exceptionally method of a CompletableFuture
-     *
-     * @param t The exception that is thrown, will be ignored
-     */
-    public <T> T close(Throwable t) {
-        close();
-        return null;
-    }
-
-    public <T> T closeAndReturn(T t) {
-        close();
-        return t;
-    }
-
     public Client(Project project, LocalDataSource dataSource) {
-        dbClient = DatabaseSessionManager.facade(project, dataSource, null, null, null, databaseDepartment).client();
+        dbClient = DatabaseSessionManager.facade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
         auditor = new Auditor();
         dbClient.getMessageBus().addAuditor(auditor);
+    }
+
+    public void setTitle(String title) {
+        dbClient.getSession().setTitle(title);
     }
 
     public Client addWarningConsumer(Consumer<Pair<Auditor.MessageType, String>> consumer) {
@@ -89,30 +65,30 @@ public class Client implements AutoCloseable {
         dbClient.getMessageBus().getDataProducer().processRequest(new DataRequest.Disconnect(dbClient));
     }
 
-    private static DatabaseDepartment databaseDepartment = new DatabaseDepartment() {
-        @Override
-        public String getDepartmentName() {
-            return "MSSQL Department name";
-        }
+    public Client open() {
+        ++useCount;
+        return this;
+    }
 
-        @Override
-        public String getCommonName() {
-            return "MSSQL Common name";
+    @Override
+    public void close() {
+        if (--useCount == 0) {
+            done();
         }
+    }
 
-        @Override
-        public Icon getIcon() {
-            return null;
-        }
+    /**
+     * Can be used in the exceptionally method of a CompletableFuture
+     *
+     * @param t The exception that is thrown, will be ignored
+     */
+    public <T> T close(Throwable t) {
+        close();
+        return null;
+    }
 
-        @Override
-        public boolean isInternal() {
-            return false;
-        }
-
-        @Override
-        public boolean isService() {
-            return false;
-        }
-    };
+    public <T> T closeAndReturn(T t) {
+        close();
+        return t;
+    }
 }

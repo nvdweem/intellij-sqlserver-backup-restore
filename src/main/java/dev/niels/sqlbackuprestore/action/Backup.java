@@ -23,6 +23,7 @@ public class Backup extends AnAction implements DumbAware {
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.client(e).open()) {
+                c.setTitle("Backup database");
                 backup(e, c);
             }
         });
@@ -53,6 +54,7 @@ public class Backup extends AnAction implements DumbAware {
         }
 
         c.open();
+        c.setTitle("Backup " + database.get().getName());
         var future = c.execute("BACKUP DATABASE [" + database.get().getName() + "] TO  DISK = N'" + target + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
                 .thenApply(c::closeAndReturn)
                 .exceptionally(c::close)

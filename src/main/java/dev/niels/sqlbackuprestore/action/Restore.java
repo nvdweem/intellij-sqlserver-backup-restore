@@ -33,11 +33,13 @@ public class Restore extends AnAction implements DumbAware {
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
             try (var c = QueryHelper.client(e)) {
+                c.setTitle("Restore database");
                 var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElseGet(this::promptDatabaseName);
                 if (target == null) {
                     return;
                 }
 
+                c.setTitle("Restore " + target);
                 var file = FileDialog.chooseFile(e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'");
                 if (StringUtils.isBlank(file)) {
                     return;
