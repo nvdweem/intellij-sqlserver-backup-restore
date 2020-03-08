@@ -26,3 +26,6 @@ patchPluginXml {
     sinceBuild = '201.0'
     untilBuild = ''
 }
+publishPlugin {
+    token intellijPublishToken
+}
