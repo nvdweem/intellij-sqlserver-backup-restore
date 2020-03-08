@@ -61,6 +61,12 @@ public class FileDialog {
         public Chooser(@NotNull FileChooserDescriptor descriptor, @Nullable Project project) {
             super(descriptor, project);
             myChooserDescriptor = descriptor;
+            super.setOKActionEnabled(true);
+        }
+
+        @Override
+        public void setOKActionEnabled(boolean isEnabled) {
+            // Nope
         }
 
         /**
@@ -248,7 +254,11 @@ public class FileDialog {
         @Override
         public VirtualFile[] getChildren() {
             if (children == null) {
-                children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").join().stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new);
+                if (isDirectory()) {
+                    children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").join().stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new);
+                } else {
+                    children = new VirtualFile[]{};
+                }
             }
             return children;
         }
