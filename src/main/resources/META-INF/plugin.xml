@@ -13,7 +13,7 @@
     <extensions defaultExtensionNs="com.intellij" />
 
     <actions>
-        <group id="org.jetbrains.tutorials.actions.GroupedActions" text="Backup / Restore" popup="true">
+        <group id="org.jetbrains.tutorials.actions.GroupedActions" text="Backup / Restore" popup="true" class="dev.niels.sqlbackuprestore.action.Group">
             <add-to-group group-id="DatabaseViewPopupMenu" anchor="after" relative-to-action="DatabaseView.RunExtensionScriptGroup"/>
             <action id="backup" class="dev.niels.sqlbackuprestore.action.Backup" text="Backup" description="Backup from bak file"/>
             <action id="download" class="dev.niels.sqlbackuprestore.action.Download" text="Backup and Download" description="Backup database and then download the file"/>
