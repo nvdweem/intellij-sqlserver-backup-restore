@@ -25,6 +25,7 @@
         - Downloading using jtds or ms driver<br>
         - No infinite wait anymore when reading data<br>
         - Refresh database after restore action<br>
+        - Sometimes the context menu items stayed disabled<br>
     0.1<br>
         - Initial version. Seems to work fine locally :).
     ]]></change-notes>
