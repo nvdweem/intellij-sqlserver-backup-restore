@@ -1,9 +1,9 @@
 package dev.niels.sqlbackuprestore.query;
 
-import com.intellij.database.dataSource.LocalDataSource;
 import com.intellij.database.dialects.mssql.model.MsDatabase;
 import com.intellij.database.psi.DbDataSource;
 import com.intellij.database.psi.DbNamespaceImpl;
+import com.intellij.database.util.DbImplUtil;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
 import org.jetbrains.annotations.NotNull;
@@ -47,7 +47,7 @@ public abstract class QueryHelper {
 
     public static Client client(@NotNull AnActionEvent e) {
         cleanOldClients();
-        var client = new Client(e.getProject(), (LocalDataSource) (getSource(e).orElseThrow()).getDelegate());
+        var client = new Client(e.getProject(), getSource(e).map(DbImplUtil::getMaybeLocalDataSource).orElseThrow());
         clients.add(client);
         return client;
     }
