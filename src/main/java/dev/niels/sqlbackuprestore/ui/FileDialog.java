@@ -1,26 +1,24 @@
 package dev.niels.sqlbackuprestore.ui;
 
-import com.intellij.openapi.fileChooser.FileChooserDescriptor;
-import com.intellij.openapi.fileChooser.ex.FileChooserDialogImpl;
-import com.intellij.openapi.fileChooser.impl.FileChooserUtil;
+import com.intellij.openapi.fileChooser.FileSaverDescriptor;
+import com.intellij.openapi.fileChooser.ex.FileSaverDialogImpl;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.openapi.vfs.VfsUtilCore;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileSystem;
+import com.intellij.ui.UIBundle;
 import dev.niels.sqlbackuprestore.query.Client;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.Arrays;
-import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -43,74 +41,66 @@ public class FileDialog {
     private String choose() {
         var fs = new DatabaseFileSystem();
         var roots = fs.getRoots();
-        var chosen = new Chooser(new FileChooserDescriptor(true, false, false, false, false, false)
-                .withTitle(title).withRoots(roots).withDescription(description), project).choose(project);
-
-        if (chosen.length > 0) {
-            return chosen[0].getPath();
+        var chosen = new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose();
+        if (chosen != null) {
+            return chosen.getPath();
         }
         return null;
     }
 
     /**
-     * Custom file chooser to work around the original class using the doOKAction check.
+     * The regular FileSaverDialogImpl seems to lean a bit too much on regular files and not remote files.
      */
-    private class Chooser extends FileChooserDialogImpl {
-        private VirtualFile[] myChosenFiles = VirtualFile.EMPTY_ARRAY;
-        private final FileChooserDescriptor myChooserDescriptor;
+    private class Chooser extends FileSaverDialogImpl {
+        private RemoteFile chosen;
 
-        public Chooser(@NotNull FileChooserDescriptor descriptor, @Nullable Project project) {
+        public Chooser(@NotNull FileSaverDescriptor descriptor, @Nullable Project project) {
             super(descriptor, project);
-            myChooserDescriptor = descriptor;
-            super.setOKActionEnabled(true);
         }
 
         @Override
         public void setOKActionEnabled(boolean isEnabled) {
-            // Nope
+            var selected = getSelectedFile();
+            getOKAction().setEnabled(selected != null && !selected.isDirectory());
         }
 
         /**
-         * Blegh
+         * Retrieve the selected file as a RemoteFile.
+         */
+        private RemoteFile getSelectedFile() {
+            RemoteFile selected = (RemoteFile) myFileSystemTree.getSelectedFile();
+            if (selected == null) {
+                return null;
+            }
+
+            var fileName = myFileName.getText();
+            if (!selected.getPath().endsWith(fileName)) {
+                var parent = selected.isDirectory() ? selected : (RemoteFile) selected.getParent();
+                return (RemoteFile) Optional.ofNullable(selected.getChild(fileName)).orElseGet(() -> new RemoteFile(((DatabaseFileSystem) parent.getFileSystem()), parent, parent.getPath() + "\\" + fileName, false, false));
+            }
+            return selected;
+        }
+
+        /**
+         * Doesn't call the parent doOkAction because that one tries to find the selected file locally.
          */
         @Override
         protected void doOKAction() {
-            if (!isOKActionEnabled()) {
+            var file = getSelectedFile();
+            if (file != null && file.isExists() && Messages.YES != Messages.showYesNoDialog(getRootPane(),
+                    UIBundle.message("file.chooser.save.dialog.confirmation", file.getName()),
+                    UIBundle.message("file.chooser.save.dialog.confirmation.title"),
+                    Messages.getWarningIcon())) {
                 return;
             }
 
-            // Changed to not care about the file existing.
-            if (myPathTextField.getField().getRootPane() != null) {
-                String text = myPathTextField.getTextFieldText();
-                myChosenFiles = new VirtualFile[]{new RemoteFile(null, null, StringUtils.removeStartIgnoreCase(text, "mssqlDb://"), false)};
-                close(OK_EXIT_CODE);
-                return;
-            }
-
-            List<VirtualFile> selectedFiles = Arrays.asList(myFileSystemTree.getSelectedFiles());
-            VirtualFile[] files = VfsUtilCore.toVirtualFileArray(FileChooserUtil.getChosenFiles(myChooserDescriptor, selectedFiles));
-            if (files.length == 0) {
-                myChosenFiles = VirtualFile.EMPTY_ARRAY;
-                close(CANCEL_EXIT_CODE);
-                return;
-            }
-
-            try {
-                myChooserDescriptor.validateSelectedFiles(files);
-            } catch (Exception e) {
-                Messages.showErrorDialog(getContentPane(), e.getMessage(), getTitle());
-                return;
-            }
-
-            myChosenFiles = files;
-
-            super.doOKAction();
+            chosen = file;
+            close(OK_EXIT_CODE);
         }
 
-        @NotNull
-        public VirtualFile[] choose(@Nullable Project project) {
-            super.choose(project);
-            return myChosenFiles;
+        public RemoteFile choose() {
+            super.save(null, null);
+            return chosen;
         }
     }
 
@@ -120,7 +110,7 @@ public class FileDialog {
     private class DatabaseFileSystem extends VirtualFileSystem {
         @SneakyThrows
         public VirtualFile[] getRoots() {
-            return connection.getResult("EXEC master..xp_fixeddrives").get(10, TimeUnit.SECONDS).stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true)).toArray(RemoteFile[]::new);
+            return connection.getResult("EXEC master..xp_fixeddrives").get(10, TimeUnit.SECONDS).stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true, true)).toArray(RemoteFile[]::new);
         }
 
         @NotNull
@@ -157,32 +147,32 @@ public class FileDialog {
         }
 
         @Override
-        protected void deleteFile(Object requestor, @NotNull VirtualFile vFile) throws IOException {
+        protected void deleteFile(Object requestor, @NotNull VirtualFile vFile) {
             // Not needed
         }
 
         @Override
-        protected void moveFile(Object requestor, @NotNull VirtualFile vFile, @NotNull VirtualFile newParent) throws IOException {
+        protected void moveFile(Object requestor, @NotNull VirtualFile vFile, @NotNull VirtualFile newParent) {
             // Not needed
         }
 
         @Override
-        protected void renameFile(Object requestor, @NotNull VirtualFile vFile, @NotNull String newName) throws IOException {
+        protected void renameFile(Object requestor, @NotNull VirtualFile vFile, @NotNull String newName) {
             // Not needed
         }
 
         @Override
-        protected VirtualFile createChildFile(Object requestor, @NotNull VirtualFile vDir, @NotNull String fileName) throws IOException {
+        protected VirtualFile createChildFile(Object requestor, @NotNull VirtualFile vDir, @NotNull String fileName) {
             return null;
         }
 
         @Override
-        protected VirtualFile createChildDirectory(Object requestor, @NotNull VirtualFile vDir, @NotNull String dirName) throws IOException {
+        protected VirtualFile createChildDirectory(Object requestor, @NotNull VirtualFile vDir, @NotNull String dirName) {
             return null;
         }
 
         @Override
-        protected VirtualFile copyFile(Object requestor, @NotNull VirtualFile virtualFile, @NotNull VirtualFile newParent, @NotNull String copyName) throws IOException {
+        protected VirtualFile copyFile(Object requestor, @NotNull VirtualFile virtualFile, @NotNull VirtualFile newParent, @NotNull String copyName) {
             return null;
         }
 
@@ -200,13 +190,16 @@ public class FileDialog {
         private final RemoteFile parent;
         private final String path;
         private final boolean directory;
+        @Getter
+        private final boolean exists;
         private VirtualFile[] children;
 
-        public RemoteFile(DatabaseFileSystem databaseFileSystem, RemoteFile parent, String path, boolean directory) {
+        public RemoteFile(DatabaseFileSystem databaseFileSystem, RemoteFile parent, String path, boolean directory, boolean exists) {
             this.databaseFileSystem = databaseFileSystem;
             this.parent = parent;
             this.path = path.length() == 1 ? path + ":" : path;
             this.directory = directory;
+            this.exists = exists;
         }
 
         @NotNull
@@ -256,12 +249,21 @@ public class FileDialog {
         public VirtualFile[] getChildren() {
             if (children == null) {
                 if (isDirectory()) {
-                    children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").get(10, TimeUnit.SECONDS).stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")))).toArray(RemoteFile[]::new);
+                    children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").get(10, TimeUnit.SECONDS).stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")), true)).toArray(RemoteFile[]::new);
                 } else {
                     children = new VirtualFile[]{};
                 }
             }
             return children;
+        }
+
+        public VirtualFile getChild(String name) {
+            for (VirtualFile child : getChildren()) {
+                if (name.equals(child.getName())) {
+                    return child;
+                }
+            }
+            return null;
         }
 
         @Override
@@ -297,7 +299,7 @@ public class FileDialog {
         }
 
         @Override
-        public InputStream getInputStream() throws IOException {
+        public InputStream getInputStream() {
             return null;
         }
     }
