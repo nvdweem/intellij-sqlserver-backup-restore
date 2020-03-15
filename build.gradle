@@ -29,3 +29,6 @@ patchPluginXml {
 publishPlugin {
     token intellijPublishToken
 }
+runIde {
+    jvmArgs '-Xmx1500M'
+}
