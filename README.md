@@ -15,11 +15,17 @@ Features:<br>
 Currently only works with the 2020 EAP versions because the API for the database seems to have been changed.
 
 ## Change notes
- 0.2<br>
-- Downloading using jtds or ms driver<br>
-- No infinite wait anymore when reading data<br>
-- Refresh database after restore action<br>
-- Sometimes the context menu items stayed disabled<br>
+0.3
+- The filepicker for the backup action didn't always select the file, it sometimes picked the folder
+- When overwriting an existing file in the backup action it didn't prompt to overwrite the file
+- When a backup action fails a message is shown
+- An internal API was used, it isn't anymore
 
-0.1<br>
+0.2
+- Downloading using jtds or ms driver
+- No infinite wait anymore when reading data
+- Refresh database after restore action
+- Sometimes the context menu items stayed disabled
+
+0.1
 - Initial version. Seems to work fine locally :).

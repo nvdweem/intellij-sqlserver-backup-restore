@@ -21,13 +21,10 @@
     ]]></description>
 
     <change-notes><![CDATA[
-    0.2<br>
-        - Downloading using jtds or ms driver<br>
-        - No infinite wait anymore when reading data<br>
-        - Refresh database after restore action<br>
-        - Sometimes the context menu items stayed disabled<br>
-    0.1<br>
-        - Initial version. Seems to work fine locally :).
+        - The filepicker for the backup action didn't always select the file, it sometimes picked the folder<br>
+        - When overwriting an existing file in the backup action it didn't prompt to overwrite the file<br>
+        - When a backup action fails a message is shown<br>
+        - An internal API was used, it isn't anymore<br>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
