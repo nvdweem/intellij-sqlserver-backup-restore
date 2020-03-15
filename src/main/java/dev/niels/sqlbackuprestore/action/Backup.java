@@ -1,9 +1,14 @@
 package dev.niels.sqlbackuprestore.action;
 
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAware;
+import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.query.Auditor;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
@@ -59,6 +64,12 @@ public class Backup extends AnAction implements DumbAware {
                 .thenApply(c::closeAndReturn)
                 .exceptionally(c::close)
                 .thenApply(x -> target);
+
+        c.addWarningConsumer(p -> {
+            if (p.getLeft() == Auditor.MessageType.ERROR) {
+                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", p.getRight(), NotificationType.ERROR));
+            }
+        });
 
         new ProgressTask(e.getProject(), "Creating Backup", false, c::addWarningConsumer).queue();
         return future;
