@@ -30,12 +30,17 @@ public class FileDialog {
     private final Client connection;
     private final String title;
     private final String description;
+    private final DialogType type;
+
+    public enum DialogType {
+        SAVE, LOAD
+    }
 
     /**
      * Open the file dialog to show files from the connection.
      */
-    public static String chooseFile(Project project, Client c, String title, String description) {
-        return new FileDialog(project, c, title, description).choose();
+    public static String chooseFile(Project project, Client c, String title, String description, DialogType type) {
+        return new FileDialog(project, c, title, description, type).choose();
     }
 
     private String choose() {
@@ -61,7 +66,7 @@ public class FileDialog {
         @Override
         public void setOKActionEnabled(boolean isEnabled) {
             var selected = getSelectedFile();
-            getOKAction().setEnabled(selected != null && !selected.isDirectory());
+            getOKAction().setEnabled(selected != null && !selected.isDirectory() && (type == DialogType.SAVE || selected.exists()));
         }
 
         /**
@@ -87,10 +92,11 @@ public class FileDialog {
         @Override
         protected void doOKAction() {
             var file = getSelectedFile();
-            if (file != null && file.isExists() && Messages.YES != Messages.showYesNoDialog(getRootPane(),
+
+            if (type == DialogType.SAVE && file != null && file.isExists() && Messages.YES != (Messages.showYesNoDialog(getRootPane(),
                     UIBundle.message("file.chooser.save.dialog.confirmation", file.getName()),
                     UIBundle.message("file.chooser.save.dialog.confirmation.title"),
-                    Messages.getWarningIcon())) {
+                    Messages.getWarningIcon())) || (type == DialogType.LOAD && (file == null || !file.exists))) {
                 return;
             }
 
@@ -301,6 +307,11 @@ public class FileDialog {
         @Override
         public InputStream getInputStream() {
             return null;
+        }
+
+        @Override
+        public boolean exists() {
+            return isExists();
         }
     }
 }
