@@ -15,6 +15,9 @@ Features:<br>
 Currently only works with the 2020 EAP versions because the API for the database seems to have been changed.
 
 ## Change notes
+0.4
+- The filepicker asked for overwriting the file when a file was being selected for restoring. That doesn't happen anymore.
+
 0.3
 - The filepicker for the backup action didn't always select the file, it sometimes picked the folder
 - When overwriting an existing file in the backup action it didn't prompt to overwrite the file

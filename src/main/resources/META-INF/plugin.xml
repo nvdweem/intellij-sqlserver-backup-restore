@@ -21,10 +21,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        - The filepicker for the backup action didn't always select the file, it sometimes picked the folder<br>
-        - When overwriting an existing file in the backup action it didn't prompt to overwrite the file<br>
-        - When a backup action fails a message is shown<br>
-        - An internal API was used, it isn't anymore<br>
+        - The filepicker asked for overwriting the file when a file was being selected for restoring. That doesn't happen anymore.<br>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
