@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 public class ProgressTask extends Task.Backgroundable {
-    private static final Pattern progressPattern = Pattern.compile("\\d+");
+    private static final Pattern progressPattern = Pattern.compile("\\[3211\\] (\\d+)");
     private final Consumer<Consumer<Pair<Auditor.MessageType, String>>> run;
     private ProgressIndicator indicator;
 
@@ -40,7 +40,7 @@ public class ProgressTask extends Task.Backgroundable {
         if (warning.getLeft() == Auditor.MessageType.WARN && warning.getRight().contains("3211")) {
             var matcher = progressPattern.matcher(warning.getRight());
             if (matcher.find()) {
-                indicator.setFraction(Integer.parseInt(matcher.group()) / 100d);
+                indicator.setFraction(Integer.parseInt(matcher.group(1)) / 100d);
             }
         } else {
             log.warn("Warning: {}:{}", warning.getLeft(), warning.getRight());

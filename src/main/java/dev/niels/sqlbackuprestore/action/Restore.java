@@ -52,11 +52,16 @@ public class Restore extends AnAction implements DumbAware {
                 }
 
                 c.open();
-                new ProgressTask(e.getProject(), "Restore backup", false, consumer ->
+                new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
+                    try {
                         new RestoreHelper(c, target, file, consumer).restore()
                                 .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
                                 .thenRun(c::close).exceptionally(c::close)
-                ).queue();
+                                .get();
+                    } catch (Exception ex) {
+                        Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", ex.getMessage(), NotificationType.ERROR));
+                    }
+                }).queue();
             }
         });
     }
