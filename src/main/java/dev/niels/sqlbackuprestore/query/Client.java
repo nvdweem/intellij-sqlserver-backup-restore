@@ -8,6 +8,7 @@ import com.intellij.database.datagrid.DataRequest;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import dev.niels.sqlbackuprestore.Constants;
+import lombok.Getter;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
@@ -18,10 +19,13 @@ import java.util.function.Consumer;
 public class Client implements AutoCloseable {
     private final DatabaseSessionClient dbClient;
     private final Auditor auditor;
+    @Getter
+    private final String dbName;
     private int useCount = 1;
 
     public Client(Project project, LocalDataSource dataSource) {
         dbClient = DatabaseSessionManager.facade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
+        dbName = dataSource.getName();
         auditor = new Auditor();
         dbClient.getMessageBus().addAuditor(auditor);
     }

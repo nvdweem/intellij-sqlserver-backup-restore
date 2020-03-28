@@ -53,7 +53,7 @@ public class Backup extends AnAction implements DumbAware {
             return CompletableFuture.completedFuture(null);
         }
 
-        var target = FileDialog.chooseFile(e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to", FileDialog.DialogType.SAVE);
+        var target = FileDialog.chooseFile(database.get().getName() + ".bak", e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to", FileDialog.DialogType.SAVE);
         if (StringUtils.isEmpty(target)) {
             return CompletableFuture.completedFuture(null);
         }

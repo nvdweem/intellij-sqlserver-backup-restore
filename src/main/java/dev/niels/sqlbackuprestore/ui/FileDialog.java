@@ -1,5 +1,7 @@
 package dev.niels.sqlbackuprestore.ui;
 
+import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.fileChooser.ex.FileSaverDialogImpl;
 import com.intellij.openapi.project.Project;
@@ -39,17 +41,41 @@ public class FileDialog {
     /**
      * Open the file dialog to show files from the connection.
      */
-    public static String chooseFile(Project project, Client c, String title, String description, DialogType type) {
-        return new FileDialog(project, c, title, description, type).choose();
+    public static String chooseFile(String fileName, Project project, Client c, String title, String description, DialogType type) {
+        return new FileDialog(project, c, title, description, type).choose(fileName);
     }
 
-    private String choose() {
+    private String choose(String fileName) {
         var fs = new DatabaseFileSystem();
         var roots = fs.getRoots();
-        var chosen = new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose();
+        var initial = getInitial(roots);
+        var chosen = new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose(initial, fileName);
         if (chosen != null) {
             return chosen.getPath();
         }
+        return null;
+    }
+
+    private RemoteFile getInitial(VirtualFile[] roots) {
+        var path = PropertiesComponent.getInstance(project).getValue(getSelectionKeyName());
+        var parts = path.split("[\\/]");
+
+        for (VirtualFile root : roots) {
+            if (!root.getName().equals(parts[0])) {
+                continue;
+            }
+
+            var current = Optional.of(root);
+            for (int i = 1; i < parts.length && current.isPresent(); i++) {
+                var ic = i;
+                current = current.map(c -> c.findChild(parts[ic]));
+            }
+
+            if (current.isPresent()) {
+                return (RemoteFile) current.get();
+            }
+        }
+
         return null;
     }
 
@@ -101,12 +127,44 @@ public class FileDialog {
             }
 
             chosen = file;
+            saveSelection(chosen);
             close(OK_EXIT_CODE);
         }
 
-        public RemoteFile choose() {
-            super.save(null, null);
+        private void saveSelection(RemoteFile file) {
+            if (file != null) {
+                if (!file.isDirectory()) {
+                    file = (RemoteFile) file.getParent();
+                }
+                PropertiesComponent.getInstance(project).setValue(getSelectionKeyName(), file.getPath());
+            }
+        }
+
+        public RemoteFile choose(RemoteFile initial, String fileName) {
+            super.save(initial, fileName);
             return chosen;
+        }
+
+        @Override
+        protected void restoreSelection(@Nullable VirtualFile toSelect) {
+            if (toSelect == null) {
+                return;
+            }
+            restoreSelection(toSelect, () -> ApplicationManager.getApplication().invokeLater(() -> myFileSystemTree.expand(toSelect, null)));
+        }
+
+        /**
+         * We must be doing something wrong but this is apparently needed, just selecting the file we want to select
+         * isn't enough. We need to open the tree one by one :(
+         */
+        private void restoreSelection(@Nullable VirtualFile toSelect, Runnable andThen) {
+            if (toSelect == null) {
+                if (andThen != null) {
+                    andThen.run();
+                }
+            } else {
+                restoreSelection(toSelect.getParent(), () -> myFileSystemTree.select(toSelect, andThen));
+            }
         }
     }
 
@@ -313,5 +371,10 @@ public class FileDialog {
         public boolean exists() {
             return isExists();
         }
+    }
+
+    @NotNull
+    private String getSelectionKeyName() {
+        return "sqlserver_backup_path_" + connection.getDbName();
     }
 }

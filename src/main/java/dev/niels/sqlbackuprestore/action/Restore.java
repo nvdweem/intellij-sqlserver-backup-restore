@@ -46,7 +46,7 @@ public class Restore extends AnAction implements DumbAware {
                 }
 
                 c.setTitle("Restore " + target);
-                var file = FileDialog.chooseFile(e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'", FileDialog.DialogType.LOAD);
+                var file = FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'", FileDialog.DialogType.LOAD);
                 if (StringUtils.isBlank(file)) {
                     return;
                 }
