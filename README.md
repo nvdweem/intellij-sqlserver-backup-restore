@@ -17,6 +17,9 @@ Currently only works with the 2020 EAP versions because the API for the database
 ## Change notes
 0.5
 - Show error when restore action fails
+- Progress for backup up and restoring is shown again
+- Store the last selected path and (try to) use it when backing up and restoring later
+- Fill in the backup filename when backing up and downloading
 
 0.4
 - The filepicker asked for overwriting the file when a file was being selected for restoring. That doesn't happen anymore.
