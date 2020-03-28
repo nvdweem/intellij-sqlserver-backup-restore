@@ -1,7 +1,9 @@
 package dev.niels.sqlbackuprestore.action;
 
 import com.intellij.database.datagrid.DataConsumer;
+import com.intellij.database.model.DasObject;
 import com.intellij.database.remote.jdbc.RemoteBlob;
+import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
@@ -15,9 +17,11 @@ import com.intellij.openapi.progress.Task;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.openapi.vfs.LocalFileSystem;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
+import dev.niels.sqlbackuprestore.ui.FileDialog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -47,9 +51,13 @@ public class Download extends AnAction implements DumbAware {
                         }
 
                         ApplicationManager.getApplication().invokeLater(() -> {
-                            var target = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(null, null).getFile();
+                            File target = getFile(e);
+                            if (target == null) {
+                                return;
+                            }
+
                             var compress = askCompress(e.getProject());
-                            if (compress) {
+                            if (compress && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
                                 target = new File(target.getAbsolutePath() + ".gzip");
                             }
 
@@ -58,6 +66,21 @@ public class Download extends AnAction implements DumbAware {
                     })
             );
         }
+    }
+
+    @Nullable
+    private File getFile(@NotNull AnActionEvent e) {
+        var property = PropertiesComponent.getInstance(e.getProject()).getValue(FileDialog.KEY_PREFIX + "download");
+        var path = property == null ? null : LocalFileSystem.getInstance().findFileByPath(property);
+        var fileName = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null) + ".bak";
+        var wrapper = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(path, fileName);
+        if (wrapper == null) {
+            return null;
+        }
+
+        var result = wrapper.getFile();
+        PropertiesComponent.getInstance(e.getProject()).getValue(FileDialog.KEY_PREFIX + "download", result.getParent());
+        return result;
     }
 
     @Override

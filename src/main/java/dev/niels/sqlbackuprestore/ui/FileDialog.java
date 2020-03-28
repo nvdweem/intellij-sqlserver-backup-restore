@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
  */
 @RequiredArgsConstructor
 public class FileDialog {
+    public static final String KEY_PREFIX = "sqlserver_backup_path_";
     private final Project project;
     private final Client connection;
     private final String title;
@@ -375,6 +376,6 @@ public class FileDialog {
 
     @NotNull
     private String getSelectionKeyName() {
-        return "sqlserver_backup_path_" + connection.getDbName();
+        return KEY_PREFIX + connection.getDbName();
     }
 }
