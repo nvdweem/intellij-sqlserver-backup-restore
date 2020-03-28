@@ -1,7 +1,6 @@
 package dev.niels.sqlbackuprestore.ui;
 
 import com.intellij.ide.util.PropertiesComponent;
-import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.fileChooser.ex.FileSaverDialogImpl;
 import com.intellij.openapi.project.Project;
@@ -59,7 +58,29 @@ public class FileDialog {
 
     private RemoteFile getInitial(VirtualFile[] roots) {
         var path = PropertiesComponent.getInstance(project).getValue(getSelectionKeyName());
-        var parts = path.split("[\\/]");
+        RemoteFile current = getRemoteFile(roots, path);
+        if (current != null) {
+            return current;
+        }
+
+
+        try {
+            var backupDirectory = (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +
+                    "if 1=isnull(cast(SERVERPROPERTY('IsLocalDB') as bit), 0)\n" +
+                    "select @BackupDirectory=cast(SERVERPROPERTY('instancedefaultdatapath') as nvarchar(512))\n" +
+                    "else\n" +
+                    "exec master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\\Microsoft\\MSSQLServer\\MSSQLServer', N'BackupDirectory', @BackupDirectory OUTPUT\n" +
+                    "\n" +
+                    "select @BackupDirectory as directory", "directory").get(2, TimeUnit.SECONDS);
+            return getRemoteFile(roots, backupDirectory);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    @Nullable
+    private RemoteFile getRemoteFile(VirtualFile[] roots, String path) {
+        var parts = path.split("[\\\\/]");
 
         for (VirtualFile root : roots) {
             if (!root.getName().equals(parts[0])) {
@@ -76,7 +97,6 @@ public class FileDialog {
                 return (RemoteFile) current.get();
             }
         }
-
         return null;
     }
 
@@ -151,7 +171,7 @@ public class FileDialog {
             if (toSelect == null) {
                 return;
             }
-            restoreSelection(toSelect, () -> ApplicationManager.getApplication().invokeLater(() -> myFileSystemTree.expand(toSelect, null)));
+            restoreSelection(toSelect, () -> myFileSystemTree.expand(toSelect, null));
         }
 
         /**
