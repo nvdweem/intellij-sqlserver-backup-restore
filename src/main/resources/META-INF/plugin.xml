@@ -21,7 +21,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        - The filepicker asked for overwriting the file when a file was being selected for restoring. That doesn't happen anymore.<br>
+        - An error is shown when a restore action fails<br>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>

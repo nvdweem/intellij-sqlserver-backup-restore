@@ -3,11 +3,15 @@ package dev.niels.sqlbackuprestore.action;
 import com.intellij.database.actions.RefreshSchemaAction;
 import com.intellij.database.model.DasObject;
 import com.intellij.database.view.DatabaseView;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
 import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.ui.Messages;
+import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Auditor;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
@@ -112,6 +116,9 @@ public class Restore extends AnAction implements DumbAware {
         }
 
         private void progress(Pair<Auditor.MessageType, String> warning) {
+            if (warning.getLeft() == Auditor.MessageType.ERROR) {
+                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", warning.getRight(), NotificationType.ERROR));
+            }
             progressConsumer.accept(warning);
         }
     }
