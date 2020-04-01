@@ -23,7 +23,7 @@
     <change-notes><![CDATA[
         - An error is shown when a restore action fails<br>
         - Progress for backup up and restoring is shown again<br>
-        - Store the last selected path and (try to) use it when backing up and restoring later<br>
+        - Store the last selected path and (try to) use it when backing up and restoring later (hotfixed)<br>
         - Fill in the backup filename when backing up and downloading<br>
     ]]></change-notes>
 
