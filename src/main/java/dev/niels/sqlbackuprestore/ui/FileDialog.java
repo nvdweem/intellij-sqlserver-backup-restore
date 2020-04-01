@@ -13,6 +13,7 @@ import dev.niels.sqlbackuprestore.query.Client;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -63,7 +64,6 @@ public class FileDialog {
             return current;
         }
 
-
         try {
             var backupDirectory = (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +
                     "if 1=isnull(cast(SERVERPROPERTY('IsLocalDB') as bit), 0)\n" +
@@ -80,7 +80,7 @@ public class FileDialog {
 
     @Nullable
     private RemoteFile getRemoteFile(VirtualFile[] roots, String path) {
-        var parts = path.split("[\\\\/]");
+        var parts = StringUtils.defaultIfBlank(path, "").split("[\\\\/]");
 
         for (VirtualFile root : roots) {
             if (!root.getName().equals(parts[0])) {
