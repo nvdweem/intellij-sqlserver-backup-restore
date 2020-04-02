@@ -58,6 +58,13 @@ public class Client implements AutoCloseable {
         });
     }
 
+    public <T> CompletableFuture<T> getSingle(String query, String column, Class<T> clazz) {
+        if (clazz == null) {
+            return null;
+        }
+        return getSingle(query, column);
+    }
+
     public CompletableFuture<List<Map<String, Object>>> withRows(String query, Consumer<Pair<List<DataConsumer.Column>, List<DataConsumer.Row>>> consumer) {
         return getResult(query, consumer);
     }

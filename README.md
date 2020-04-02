@@ -15,6 +15,9 @@ Features:<br>
 Currently only works with the 2020 EAP versions because the API for the database seems to have been changed.
 
 ## Change notes
+0.6
+- Progress indication when downloading backup
+
 0.5.1
 - Fix NPE when opening a file dialog
 

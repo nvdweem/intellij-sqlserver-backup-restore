@@ -1,6 +1,5 @@
 package dev.niels.sqlbackuprestore.action;
 
-import com.intellij.database.datagrid.DataConsumer;
 import com.intellij.database.model.DasObject;
 import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.ide.util.PropertiesComponent;
@@ -24,7 +23,6 @@ import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -33,7 +31,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.SQLException;
-import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Triggers backup and then allows downloading the result
@@ -43,26 +42,41 @@ public class Download extends AnAction implements DumbAware {
     public void actionPerformed(@NotNull AnActionEvent e) {
         try (var c = QueryHelper.client(e)) {
             c.open();
+
             ApplicationManager.getApplication().invokeLater(() ->
-                    new Backup().backup(e, c).thenAccept(source -> {
+                    new Backup().backup(e, c).thenAcceptAsync(source -> {
                         if (StringUtils.isEmpty(source)) {
                             c.close();
                             return;
                         }
 
-                        ApplicationManager.getApplication().invokeLater(() -> {
-                            File target = getFile(e);
-                            if (target == null) {
-                                return;
-                            }
+                        AtomicBoolean compressed = new AtomicBoolean(false);
 
-                            var compress = askCompress(e.getProject());
-                            if (compress && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
-                                target = new File(target.getAbsolutePath() + ".gzip");
-                            }
+                        c.execute("SELECT CAST(0 as bigint) AS fs, BulkColumn AS f into #filedownload FROM OPENROWSET(BULK N'" + source + "', SINGLE_BLOB) x;")
+                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"))
+                                .thenCompose(x -> c.getSingle("select fs from #filedownload", "fs", Long.class))
+                                .thenCompose(size -> {
+                                    ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), size)));
 
-                            new DownloadTask(e.getProject(), c, source, target, compress).queue();
-                        });
+                                    if (compressed.get()) {
+                                        // Compress blob and update filesize
+                                        return c.execute("update #filedownload set f = COMPRESS(f);")
+                                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"));
+                                    }
+                                    return CompletableFuture.completedFuture(null);
+                                })
+                                .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
+                                    File target = getFile(e);
+                                    if (target == null) {
+                                        return;
+                                    }
+
+                                    if (compressed.get() && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
+                                        target = new File(target.getAbsolutePath() + ".gzip");
+                                    }
+
+                                    new DownloadTask(e.getProject(), c, source, target).queue();
+                                }));
                     })
             );
         }
@@ -88,9 +102,9 @@ public class Download extends AnAction implements DumbAware {
         e.getPresentation().setEnabled(QueryHelper.getDatabase(e).isPresent());
     }
 
-    private boolean askCompress(Project project) {
+    private boolean askCompress(Project project, Long size) {
         return Messages.YES == Messages.showYesNoDialog(project,
-                "Do you want to compress the file before downloading?",
+                String.format("The backup size is %s, do you want to compress the file before downloading?", size == null ? "?" : Util.humanReadableByteCountSI(size)),
                 "Compress?",
                 Messages.getQuestionIcon());
     }
@@ -101,14 +115,12 @@ public class Download extends AnAction implements DumbAware {
         private final Client connection;
         private final String path;
         private final File target;
-        private final boolean compress;
 
-        public DownloadTask(@Nullable Project project, Client connection, String path, File target, boolean compress) {
+        public DownloadTask(@Nullable Project project, Client connection, String path, File target) {
             super(project, "Downloading " + path);
             this.connection = connection;
             this.path = path;
             this.target = target;
-            this.compress = compress;
         }
 
         @Override
@@ -117,17 +129,10 @@ public class Download extends AnAction implements DumbAware {
                 indicator.setIndeterminate(false);
                 indicator.setFraction(0.0);
 
-                var column = "BulkColumn";
-                if (compress) {
-                    column = "COMPRESS(BulkColumn) as BulkColumn";
-                    indicator.setText(String.format("Compressing '%s'", path));
-                } else {
-                    indicator.setText(getTitle());
-                }
-
-                connection.withRows("SELECT BulkColumn, LEN(BulkColumn) AS size FROM (SELECT " + column + " FROM OPENROWSET(BULK N'" + path + "', SINGLE_BLOB) rs) r", r -> readBlobToFile(indicator, fos, r))
-                        .thenRun(connection::close)
+                connection.getSingle("SELECT fs FROM #filedownload", "fs", Long.class)
+                        .thenCompose(s -> download(indicator, fos, s))
                         .exceptionally(connection::close)
+                        .thenRun(connection::close)
                         .thenRun(() -> cleanIfCancelled(indicator))
                         .get();
             } catch (Exception e) {
@@ -135,6 +140,57 @@ public class Download extends AnAction implements DumbAware {
             }
         }
 
+        private CompletableFuture<?> download(@NotNull ProgressIndicator indicator, FileOutputStream fos, Long s) {
+            // Split into 100 parts unless the parts are smaller than 1MB
+            var part = Math.max(1_000_000, (long) Math.ceil(s / 100d));
+            var parts = Math.ceil((double) s / part);
+
+            CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
+
+            // Build a chain of part downloads that are executed sequentially
+            AtomicBoolean error = new AtomicBoolean(false);
+            for (var i = 0; i < parts; i++) {
+                var current = i;
+                chain = chain.thenCompose(x -> {
+                    // Allow cancelling and don't proceed if there was an error
+                    if (error.get() || indicator.isCanceled()) {
+                        return CompletableFuture.completedFuture(null);
+                    }
+
+                    // Get the next part and store it
+                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part, part), cr -> {
+                        try {
+                            write(fos, cr.getRight().get(0).getValue(0));
+                            indicator.setFraction(current / parts);
+                            indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
+                        } catch (Exception e) {
+                            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + target + ":\n" + e.getMessage(), NotificationType.ERROR));
+                            error.set(true);
+                        }
+                    });
+                });
+            }
+            return chain;
+        }
+
+        /**
+         * Write a single part to the file stream
+         */
+        private void write(FileOutputStream fos, Object blob) throws IOException, SQLException {
+            if (blob instanceof RemoteBlob) {
+                saveBlob(fos, (RemoteBlob) blob);
+            } else if (blob instanceof byte[]) {
+                saveBlob(fos, (byte[]) blob);
+            } else if (blob instanceof String) {
+                saveBlob(fos, (String) blob); // Haven't actually seen this happen...
+            } else {
+                throw new IllegalArgumentException("Unable to download column of type " + blob.getClass().getName());
+            }
+        }
+
+        /**
+         * Check if the indicator was cancelled, if so delete the target file.
+         */
         private void cleanIfCancelled(ProgressIndicator indicator) {
             if (indicator.isCanceled()) {
                 try {
@@ -145,40 +201,31 @@ public class Download extends AnAction implements DumbAware {
             }
         }
 
-        private void readBlobToFile(@NotNull ProgressIndicator indicator, FileOutputStream fos, Pair<List<DataConsumer.Column>, List<DataConsumer.Row>> rows) {
-            try {
-                var blob = rows.getRight().get(0).getValue(0);
-                var size = ((Long) rows.getRight().get(0).getValue(1));
-
-                if (blob instanceof RemoteBlob) {
-                    saveBlob(indicator, fos, (RemoteBlob) blob, size);
-                } else if (blob instanceof byte[]) {
-                    saveBArr(indicator, fos, (byte[]) blob);
-                } else {
-                    Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Failed to download", "Unable to download column of type " + blob.getClass().getName(), NotificationType.ERROR));
-                }
-                indicator.setFraction(1);
-            } catch (Exception e) {
-                log.error("Error occurred while downloading", e);
-                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Failed to download", "The download failed with message:\n" + e.getMessage(), NotificationType.ERROR));
-            }
-        }
-
-        private void saveBArr(ProgressIndicator indicator, FileOutputStream fos, byte[] blob) throws IOException {
-            indicator.setIndeterminate(false);
+        /**
+         * Write byte array to file
+         */
+        private void saveBlob(FileOutputStream fos, byte[] blob) throws IOException {
             fos.write(blob);
         }
 
-        private void saveBlob(ProgressIndicator indicator, FileOutputStream fos, RemoteBlob blob, long size) throws IOException, SQLException {
+        /**
+         * Write RemoteBlob to file
+         */
+        private void saveBlob(FileOutputStream fos, RemoteBlob blob) throws IOException, SQLException {
             long position = 1;
-            while (position < size && !indicator.isCanceled()) {
+            while (position < blob.length()) {
                 fos.write(blob.getBytes(position, CHUNK_SIZE));
                 fos.flush();
                 position += CHUNK_SIZE;
-                position = Math.min(size, position);
-                indicator.setFraction((double) position / size);
-                indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(position), Util.humanReadableByteCountSI(size)));
+                position = Math.min(blob.length(), position);
             }
+        }
+
+        /**
+         * Write string to file
+         */
+        private void saveBlob(FileOutputStream fos, String blob) throws IOException {
+            saveBlob(fos, blob.getBytes());
         }
     }
 }
