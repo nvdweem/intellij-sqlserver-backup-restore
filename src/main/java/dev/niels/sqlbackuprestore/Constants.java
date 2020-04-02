@@ -6,6 +6,7 @@ import javax.swing.Icon;
 
 public class Constants {
     public static final String NOTIFICATION_GROUP = "SQL Backup and Restore";
+    public static final String ERROR = "Error occurred";
 
     private Constants() {
     }

@@ -22,6 +22,7 @@
 
     <change-notes><![CDATA[
         - Added progress indication when downloading backup from server<br/>
+        - Allow closing connections when restoring<br/>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>

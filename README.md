@@ -17,6 +17,7 @@ Currently only works with the 2020 EAP versions because the API for the database
 ## Change notes
 0.6
 - Progress indication when downloading backup
+- Allow closing connections when restoring
 
 0.5.1
 - Fix NPE when opening a file dialog
