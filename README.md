@@ -12,7 +12,7 @@ Features:<br>
   <li> Reading a backup into a newly created database </li>
 </ul><br>
 <br>
-Currently only works with the 2020 EAP versions because the API for the database seems to have been changed.
+Built for 2020.1 and higher because the internal database api has changed in that version.
 
 ## Change notes
 0.6
