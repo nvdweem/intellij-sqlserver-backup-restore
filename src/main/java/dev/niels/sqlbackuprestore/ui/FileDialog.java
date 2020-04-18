@@ -1,6 +1,9 @@
 package dev.niels.sqlbackuprestore.ui;
 
 import com.intellij.ide.util.PropertiesComponent;
+import com.intellij.notification.Notification;
+import com.intellij.notification.NotificationType;
+import com.intellij.notification.Notifications;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.fileChooser.ex.FileSaverDialogImpl;
 import com.intellij.openapi.project.Project;
@@ -9,6 +12,7 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import com.intellij.ui.UIBundle;
+import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Client;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +53,12 @@ public class FileDialog {
     private String choose(String fileName) {
         var fs = new DatabaseFileSystem();
         var roots = fs.getRoots();
+
+        if (roots.length == 0) {
+            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", "The database user for this connection is not allowed to read drives.", NotificationType.ERROR));
+            return null;
+        }
+
         var initial = getInitial(roots);
         var chosen = new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose(initial, fileName);
         if (chosen != null) {

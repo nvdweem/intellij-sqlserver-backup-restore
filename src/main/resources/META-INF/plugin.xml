@@ -21,8 +21,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        - Added progress indication when downloading backup from server<br/>
-        - Allow closing connections when restoring<br/>
+        - When the user can't list drives (EXEC master..xp_fixeddrives) a message is shown instead of a local file browser.<br/>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
