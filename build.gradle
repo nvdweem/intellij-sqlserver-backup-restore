@@ -23,7 +23,7 @@ intellij {
     downloadSources true
 }
 patchPluginXml {
-    sinceBuild = '201.0'
+    sinceBuild = '201.7223'
     untilBuild = ''
 }
 publishPlugin {
