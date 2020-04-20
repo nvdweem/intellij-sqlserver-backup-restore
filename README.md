@@ -15,7 +15,8 @@ Features:<br>
 Built for 2020.1 and higher because the internal database api has changed in that version.
 
 ## Change notes
-0.7
+0.6.1
+- Fix compatibility with v201.7223.18.
 - When the user can't list drives (EXEC master..xp_fixeddrives) a message is shown instead of a local file browser.
 
 0.6

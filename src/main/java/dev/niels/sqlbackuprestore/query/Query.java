@@ -22,7 +22,7 @@ public class Query extends DataRequest.RawQueryRequest {
     @Getter
     private CompletableFuture<List<Map<String, Object>>> future = new CompletableFuture<>();
 
-    protected Query(Client c, OwnerEx owner, String query, Consumer<Pair<List<Column>, List<Row>>> consumer) {
+    protected Query(Client c, Owner owner, String query, Consumer<Pair<List<Column>, List<Row>>> consumer) {
         super(owner, query, DataRequest.newConstraints(0, 5000, 0, 0));
         this.consumer = consumer;
 

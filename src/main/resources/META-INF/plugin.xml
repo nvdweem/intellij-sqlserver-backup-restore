@@ -21,6 +21,7 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        - Fix compatibility with v201.7223.18.<br/>
         - When the user can't list drives (EXEC master..xp_fixeddrives) a message is shown instead of a local file browser.<br/>
     ]]></change-notes>
 
