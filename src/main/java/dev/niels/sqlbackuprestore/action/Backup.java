@@ -47,23 +47,23 @@ public class Backup extends AnAction implements DumbAware {
      * @param c the connection that should be used for backing up (will be taken over if a backup is being made, close it from the future as well).
      * @return a pair of the connection that should be closed and the file that was being selected. The original connection and null if no file was selected.
      */
-    protected CompletableFuture<String> backup(@NotNull AnActionEvent e, Client c) {
+    protected CompletableFuture<FileDialog.RemoteFile> backup(@NotNull AnActionEvent e, Client c) {
         var database = QueryHelper.getDatabase(e);
         if (database.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
 
         var target = FileDialog.chooseFile(database.get().getName() + ".bak", e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to", FileDialog.DialogType.SAVE);
-        if (StringUtils.isEmpty(target)) {
+        if (target == null) {
             return CompletableFuture.completedFuture(null);
         }
 
         c.open();
         c.setTitle("Backup " + database.get().getName());
-        var future = c.execute("BACKUP DATABASE [" + database.get().getName() + "] TO  DISK = N'" + target + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
-                .thenApply(c::closeAndReturn)
-                .exceptionally(c::close)
-                .thenApply(x -> target);
+        var future = c.execute("BACKUP DATABASE [" + database.get().getName() + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
+                      .thenApply(c::closeAndReturn)
+                      .exceptionally(c::close)
+                      .thenApply(x -> target);
 
         c.addWarningConsumer(p -> {
             if (p.getLeft() == Auditor.MessageType.ERROR) {
