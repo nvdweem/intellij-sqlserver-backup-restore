@@ -49,6 +49,7 @@ public class Client implements AutoCloseable {
         return getResult(query, null);
     }
 
+    @SuppressWarnings("unchecked")
     public <T> CompletableFuture<T> getSingle(String query, String column) {
         return getResult(query).thenApply(r -> {
             if (r.isEmpty()) {
@@ -93,8 +94,7 @@ public class Client implements AutoCloseable {
         if (!dbClient.getSession().isConnected()) {
             var session = dbClient.getSession();
             DatabaseSessionClient[] clients = session.getClients();
-            for (int idx = 0; idx < clients.length; ++idx) {
-                DatabaseSessionClient client = clients[idx];
+            for (DatabaseSessionClient client : clients) {
                 session.detach(client);
             }
             Disposer.dispose(session);
@@ -106,6 +106,7 @@ public class Client implements AutoCloseable {
      *
      * @param t The exception that is thrown, will be ignored
      */
+    @SuppressWarnings("unused")
     public <T> T close(Throwable t) {
         close();
         return null;
