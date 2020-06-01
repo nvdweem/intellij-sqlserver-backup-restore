@@ -46,11 +46,11 @@ public class FileDialog {
     /**
      * Open the file dialog to show files from the connection.
      */
-    public static String chooseFile(String fileName, Project project, Client c, String title, String description, DialogType type) {
+    public static RemoteFile chooseFile(String fileName, Project project, Client c, String title, String description, DialogType type) {
         return new FileDialog(project, c, title, description, type).choose(fileName);
     }
 
-    private String choose(String fileName) {
+    private RemoteFile choose(String fileName) {
         var fs = new DatabaseFileSystem();
         var roots = fs.getRoots();
 
@@ -60,11 +60,7 @@ public class FileDialog {
         }
 
         var initial = getInitial(roots);
-        var chosen = new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose(initial, fileName);
-        if (chosen != null) {
-            return chosen.getPath();
-        }
-        return null;
+        return new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose(initial, fileName);
     }
 
     private RemoteFile getInitial(VirtualFile[] roots) {
@@ -280,7 +276,7 @@ public class FileDialog {
     /**
      * Tree navigation from the connection
      */
-    private class RemoteFile extends VirtualFile {
+    public class RemoteFile extends VirtualFile {
         private final DatabaseFileSystem databaseFileSystem;
         private final RemoteFile parent;
         private final String path;
