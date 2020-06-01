@@ -1,6 +1,5 @@
 package dev.niels.sqlbackuprestore.action;
 
-import com.intellij.database.model.DasObject;
 import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
@@ -68,6 +67,7 @@ public class Download extends AnAction implements DumbAware {
                          .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
                              File target = getFile(e, source.getName());
                              if (target == null) {
+                                 c.close();
                                  return;
                              }
 
