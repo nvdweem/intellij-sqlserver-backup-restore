@@ -1,5 +1,6 @@
 package dev.niels.sqlbackuprestore.action;
 
+import com.intellij.database.model.DasObject;
 import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
@@ -16,6 +17,7 @@ import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
@@ -52,31 +54,31 @@ public class Download extends AnAction implements DumbAware {
                         AtomicBoolean compressed = new AtomicBoolean(false);
 
                         c.execute("SELECT CAST(0 as bigint) AS fs, BulkColumn AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
-                         .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"))
-                         .thenCompose(x -> c.getSingle("select fs from #filedownload", "fs", Long.class))
-                         .thenCompose(size -> {
-                             ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), size)));
+                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"))
+                                .thenCompose(x -> c.getSingle("select fs from #filedownload", "fs", Long.class))
+                                .thenCompose(size -> {
+                                    ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), size)));
 
-                             if (compressed.get()) {
-                                 // Compress blob and update filesize
-                                 return c.execute("update #filedownload set f = COMPRESS(f);")
-                                         .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"));
-                             }
-                             return CompletableFuture.completedFuture(null);
-                         })
-                         .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
-                             File target = getFile(e, source.getName());
-                             if (target == null) {
-                                 c.close();
-                                 return;
-                             }
+                                    if (compressed.get()) {
+                                        // Compress blob and update filesize
+                                        return c.execute("update #filedownload set f = COMPRESS(f);")
+                                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"));
+                                    }
+                                    return CompletableFuture.completedFuture(null);
+                                })
+                                .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
+                                    File target = getFile(e, source.getName());
+                                    if (target == null) {
+                                        c.close();
+                                        return;
+                                    }
 
-                             if (compressed.get() && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
-                                 target = new File(target.getAbsolutePath() + ".gzip");
-                             }
+                                    if (compressed.get() && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
+                                        target = new File(target.getAbsolutePath() + ".gzip");
+                                    }
 
-                             new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
-                         }));
+                                    new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
+                                }));
                     })
             );
         }
@@ -86,6 +88,10 @@ public class Download extends AnAction implements DumbAware {
     private File getFile(@NotNull AnActionEvent e, String fileName) {
         var property = PropertiesComponent.getInstance(e.getProject()).getValue(FileDialog.KEY_PREFIX + "download");
         var path = property == null ? null : LocalFileSystem.getInstance().findFileByPath(property);
+
+        if (AppSettingsState.getInstance().isUseDbNameOnDownload()) {
+            fileName = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null) + ".bak";
+        }
         var wrapper = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(path, fileName);
         if (wrapper == null) {
             return null;
@@ -102,10 +108,14 @@ public class Download extends AnAction implements DumbAware {
     }
 
     private boolean askCompress(Project project, Long size) {
-        return Messages.YES == Messages.showYesNoDialog(project,
-                String.format("The backup size is %s, do you want to compress the file before downloading?", size == null ? "?" : Util.humanReadableByteCountSI(size)),
-                "Compress?",
-                Messages.getQuestionIcon());
+        var askWhen = AppSettingsState.getInstance().getCompressionSize() * 1024 * 1024;
+        if (size == null || askWhen <= size) {
+            return Messages.YES == Messages.showYesNoDialog(project,
+                    String.format("The backup size is %s, do you want to compress the file before downloading?", size == null ? "?" : Util.humanReadableByteCountSI(size)),
+                    "Compress?",
+                    Messages.getQuestionIcon());
+        }
+        return false;
     }
 
     @Slf4j
@@ -129,11 +139,11 @@ public class Download extends AnAction implements DumbAware {
                 indicator.setFraction(0.0);
 
                 connection.getSingle("SELECT fs FROM #filedownload", "fs", Long.class)
-                          .thenCompose(s -> download(indicator, fos, s))
-                          .exceptionally(connection::close)
-                          .thenRun(connection::close)
-                          .thenRun(() -> cleanIfCancelled(indicator))
-                          .get();
+                        .thenCompose(s -> download(indicator, fos, s))
+                        .exceptionally(connection::close)
+                        .thenRun(connection::close)
+                        .thenRun(() -> cleanIfCancelled(indicator))
+                        .get();
             } catch (Exception e) {
                 Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
             }

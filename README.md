@@ -15,6 +15,11 @@ Features:<br>
 Built for 2020.1 and higher because the internal database api has changed in that version.
 
 ## Change notes
+0.7
+- The suggested name for downloading a backup is the name the backup was given when backing up (Pull request from felhag)
+- When cancelling a backup & download the connection with the database will be closed
+- Asking for compression and using database name as default filename is configurable
+
 0.6.1
 - Fix compatibility with v201.7223.18.
 - When the user can't list drives (EXEC master..xp_fixeddrives) a message is shown instead of a local file browser.

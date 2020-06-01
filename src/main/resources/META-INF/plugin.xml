@@ -1,6 +1,6 @@
 <idea-plugin>
     <id>dev.niels.SQLServerBackupAndRestore</id>
-    <name>SQL Server backup and restore</name>
+    <name>SQL Server Backup And Restore</name>
     <vendor email="support@niels.dev" url="https://github.com/nvdweem/intellij-sqlserver-backup-restore">Niels vd Weem</vendor>
 
     <description><![CDATA[
@@ -21,14 +21,20 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        - Fix compatibility with v201.7223.18.<br/>
-        - When the user can't list drives (EXEC master..xp_fixeddrives) a message is shown instead of a local file browser.<br/>
+        - The suggested name for downloading a backup is the name the backup was given when backing up (Pull request from felhag)<br/>
+        - When cancelling a backup & download the connection with the database will be closed<br/>
+        - Asking for compression and using database name as default filename is configurable<br/>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.database</depends>
 
-    <extensions defaultExtensionNs="com.intellij" />
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceImplementation="dev.niels.sqlbackuprestore.AppSettingsState"/>
+
+        <applicationConfigurable parentId="tools" instance="dev.niels.sqlbackuprestore.SettingsConfigurable"
+                                 id="dev.niels.sqlbackuprestore.SettingsConfigurable" displayName="SQLServer Backup And Restore"/>
+    </extensions>
 
     <actions>
         <group id="org.jetbrains.tutorials.actions.GroupedActions" text="Backup / Restore" popup="true" class="dev.niels.sqlbackuprestore.action.Group">
