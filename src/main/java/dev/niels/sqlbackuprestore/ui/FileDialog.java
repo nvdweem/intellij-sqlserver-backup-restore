@@ -296,7 +296,7 @@ public class FileDialog {
         @NotNull
         @Override
         public String getName() {
-            var idx = path.lastIndexOf('/');
+            var idx = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
             if (idx == -1) {
                 return path;
             }
@@ -364,7 +364,7 @@ public class FileDialog {
 
         @NotNull
         @Override
-        public byte[] contentsToByteArray() throws IOException {
+        public byte[] contentsToByteArray() {
             return new byte[0];
         }
 
