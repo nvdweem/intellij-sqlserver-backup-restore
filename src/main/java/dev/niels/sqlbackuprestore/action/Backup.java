@@ -53,17 +53,20 @@ public class Backup extends AnAction implements DumbAware {
             return CompletableFuture.completedFuture(null);
         }
 
-        var target = FileDialog.chooseFile(database.get().getName() + ".bak", e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to", FileDialog.DialogType.SAVE);
+        var name = database.get().getName();
+        var target = FileDialog.chooseFile(name + ".bak", e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to", FileDialog.DialogType.SAVE);
         if (target == null) {
             return CompletableFuture.completedFuture(null);
         }
 
         c.open();
-        c.setTitle("Backup " + database.get().getName());
-        var future = c.execute("BACKUP DATABASE [" + database.get().getName() + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
+        c.setTitle("Backup " + name);
+        var future = c.execute("BACKUP DATABASE [" + name + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
                       .thenApply(c::closeAndReturn)
                       .exceptionally(c::close)
-                      .thenApply(x -> target);
+                      .thenCompose(x -> c.getSingle(String.format("USE [%s] exec sp_spaceused @oneresultset = 1", name), "reserved", String.class)
+                                         .thenApply(kb -> Long.parseLong(StringUtils.removeEnd(kb, " KB")) * 1024)
+                                         .thenApply(target::setLength));
 
         c.addWarningConsumer(p -> {
             if (p.getLeft() == Auditor.MessageType.ERROR) {
