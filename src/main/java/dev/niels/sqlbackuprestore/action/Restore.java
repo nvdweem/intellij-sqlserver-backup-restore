@@ -18,12 +18,15 @@ import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +37,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Restore a database from a (remote) file. Cannot be a gzipped file.
@@ -66,7 +70,8 @@ public class Restore extends AnAction implements DumbAware {
             c.open();
             new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
                 try {
-                    new RestoreHelper(c, target, file.getPath(), consumer).restore()
+                    new RestoreHelper(c, target, file.getPath(), consumer).unzipIfNeeded()
+                                                                          .restore()
                                                                           .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
                                                                           .thenRun(c::close).exceptionally(c::close)
                                                                           .get();
@@ -133,14 +138,31 @@ public class Restore extends AnAction implements DumbAware {
         }
     }
 
-    @RequiredArgsConstructor
+    @AllArgsConstructor
     @Slf4j
     private static class RestoreHelper {
         private final Client connection;
         private final String target;
-        private final String file;
+        private String file;
         private final Consumer<Pair<Auditor.MessageType, String>> progressConsumer;
         private final Map<String, Integer> uniqueNames = new HashMap<>();
+
+        public RestoreHelper unzipIfNeeded() {
+            if (file.toLowerCase().endsWith(".gzip")) {
+                var unzipped = StringUtils.appendIfMissing(StringUtils.removeEndIgnoreCase(file, ".gzip"), ".bak");
+                try (var fis = new FileInputStream(file); var gzis = new GZIPInputStream(fis); var fos = new FileOutputStream(unzipped)) {
+                    byte[] buffer = new byte[1024];
+                    int length;
+                    while ((length = gzis.read(buffer)) > 0) {
+                        fos.write(buffer, 0, length);
+                    }
+                    file = unzipped;
+                } catch (IOException e) {
+                    log.warn("failed to unzip {}", file);
+                }
+            }
+            return this;
+        }
 
         public CompletableFuture<Void> restore() {
             return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
