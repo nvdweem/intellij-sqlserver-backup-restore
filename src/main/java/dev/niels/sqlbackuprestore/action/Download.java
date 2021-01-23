@@ -33,7 +33,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -99,10 +98,13 @@ public class Download extends AnAction implements DumbAware {
     }
 
     private boolean askCompress(Project project, Long size) {
+        var compressed = AppSettingsState.getInstance().isUseCompressedBackup();
         var askWhen = AppSettingsState.getInstance().getCompressionSize() * 1024 * 1024;
         if (size == null || askWhen <= size) {
+            var message = compressed ? "The original database was %s before compression. Do you want to apply additional compression before downloading?"
+                    : "The database size is %s, do you want to compress the file before downloading?";
             return Messages.YES == Messages.showYesNoDialog(project,
-                    String.format("The backup size is %s, do you want to compress the file before downloading?", size == null ? "?" : Util.humanReadableByteCountSI(size)),
+                    String.format(message, size == null ? "?" : Util.humanReadableByteCountSI(size)),
                     "Compress?",
                     Messages.getQuestionIcon());
         }

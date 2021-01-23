@@ -16,6 +16,7 @@ import org.jetbrains.annotations.Nullable;
 @Data
 public class AppSettingsState implements PersistentStateComponent<AppSettingsState> {
     private long compressionSize = 0L;
+    private boolean useCompressedBackup = true;
     private boolean useDbNameOnDownload = false;
 
     public static AppSettingsState getInstance() {

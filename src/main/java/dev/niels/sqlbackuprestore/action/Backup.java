@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAware;
+import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Auditor;
 import dev.niels.sqlbackuprestore.query.Client;
@@ -61,12 +62,12 @@ public class Backup extends AnAction implements DumbAware {
 
         c.open();
         c.setTitle("Backup " + name);
-        var future = c.execute("BACKUP DATABASE [" + name + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD, STATS = 10")
-                      .thenApply(c::closeAndReturn)
-                      .exceptionally(c::close)
-                      .thenCompose(x -> c.getSingle(String.format("USE [%s] exec sp_spaceused @oneresultset = 1", name), "reserved", String.class)
-                                         .thenApply(kb -> Long.parseLong(StringUtils.removeEnd(kb, " KB")) * 1024)
-                                         .thenApply(target::setLength));
+        var future = c.execute("BACKUP DATABASE [" + name + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD" + (AppSettingsState.getInstance().isUseCompressedBackup() ? ", COMPRESSION" : "") + ", STATS = 10")
+                .thenApply(c::closeAndReturn)
+                .exceptionally(c::close)
+                .thenCompose(x -> c.getSingle(String.format("USE [%s] exec sp_spaceused @oneresultset = 1", name), "reserved", String.class)
+                        .thenApply(kb -> Long.parseLong(StringUtils.removeEnd(kb, " KB")) * 1024)
+                        .thenApply(target::setLength));
 
         c.addWarningConsumer(p -> {
             if (p.getLeft() == Auditor.MessageType.ERROR) {
