@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
  * File dialog to show remote files from SQLServer.
@@ -73,13 +72,7 @@ public class FileDialog {
         }
 
         try {
-            var backupDirectory = (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +
-                    "if 1=isnull(cast(SERVERPROPERTY('IsLocalDB') as bit), 0)\n" +
-                    "select @BackupDirectory=cast(SERVERPROPERTY('instancedefaultdatapath') as nvarchar(512))\n" +
-                    "else\n" +
-                    "exec master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\\Microsoft\\MSSQLServer\\MSSQLServer', N'BackupDirectory', @BackupDirectory OUTPUT\n" +
-                    "\n" +
-                    "select @BackupDirectory as directory", "directory").get(2, TimeUnit.SECONDS);
+            var backupDirectory = SQLHelper.getDefaultBackupDirectory(connection);
             return getRemoteFile(roots, backupDirectory);
         } catch (Exception e) {
             return null;
@@ -203,7 +196,7 @@ public class FileDialog {
     private class DatabaseFileSystem extends VirtualFileSystem {
         @SneakyThrows
         public VirtualFile[] getRoots() {
-            return connection.getResult("EXEC master..xp_fixeddrives").get(10, TimeUnit.SECONDS).stream().map(r -> (String) r.get("drive")).map(p -> new RemoteFile(this, null, p, true, true)).toArray(RemoteFile[]::new);
+            return SQLHelper.getDrives(connection).stream().map(r -> (String) r.get("Name")).map(p -> new RemoteFile(this, null, p, true, true)).toArray(RemoteFile[]::new);
         }
 
         @NotNull
@@ -286,7 +279,10 @@ public class FileDialog {
         @Getter
         private final boolean exists;
         private VirtualFile[] children;
-        private @Getter @Setter @Accessors(chain = true) long length = 0;
+        @Getter
+        @Setter
+        @Accessors(chain = true)
+        private long length = 0;
 
         public RemoteFile(DatabaseFileSystem databaseFileSystem, RemoteFile parent, String path, boolean directory, boolean exists) {
             this.databaseFileSystem = databaseFileSystem;
@@ -343,7 +339,7 @@ public class FileDialog {
         public VirtualFile[] getChildren() {
             if (children == null) {
                 if (isDirectory()) {
-                    children = connection.getResult("EXEC xp_dirtree '" + path + "', 1, 1").get(10, TimeUnit.SECONDS).stream().map(r -> new RemoteFile(databaseFileSystem, this, path + "/" + r.get("subdirectory"), !Integer.valueOf(1).equals(r.get("file")), true)).toArray(RemoteFile[]::new);
+                    children = SQLHelper.getSQLPathChildren(connection, path).stream().map(r -> new RemoteFile(databaseFileSystem, this, r.get("FullName").toString(), !Integer.valueOf(1).equals(r.get("IsFile")), true)).toArray(RemoteFile[]::new);
                 } else {
                     children = new VirtualFile[]{};
                 }
