@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.SQLException;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -52,31 +53,21 @@ public class Download extends AnAction implements DumbAware {
                         }
 
                         AtomicBoolean compressed = new AtomicBoolean(false);
+                        ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), source.getLength())));
+                        var col = compressed.get() ? "COMPRESS(BulkColumn)" : "BulkColumn";
 
-                        c.execute("SELECT CAST(0 as bigint) AS fs, BulkColumn AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
+                        c.execute("SELECT CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
                                 .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"))
-                                .thenCompose(x -> c.getSingle("select fs from #filedownload", "fs", Long.class))
-                                .thenCompose(size -> {
-                                    ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), size)));
-
-                                    if (compressed.get()) {
-                                        // Compress blob and update filesize
-                                        return c.execute("update #filedownload set f = COMPRESS(f);")
-                                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"));
-                                    }
-                                    return CompletableFuture.completedFuture(null);
-                                })
                                 .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
-                                    File target = getFile(e, source.getName());
+                                    var name = source.getName() + (compressed.get() ? ".gzip" : "");
+                                    var target = getFile(e, name);
                                     if (target == null) {
                                         c.close();
                                         return;
                                     }
-
                                     if (compressed.get() && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
                                         target = new File(target.getAbsolutePath() + ".gzip");
                                     }
-
                                     new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
                                 }));
                     })
