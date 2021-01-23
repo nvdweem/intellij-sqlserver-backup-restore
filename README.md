@@ -15,6 +15,13 @@ Features:<br>
 Built for 2020.1 and higher because the internal database api has changed in that version.
 
 ## Change notes
+0.8
+- gzipped files can be restored without needing to manually unzip them (Pull request from felhag)
+- When downloading, the question to compress is asked before loading the backup into the database. This helps with backups that are bigger than 2gb which is the default maximum size for blobs (Pull request from felhag)  
+- Added setting to do compressed backups. The previous compression options are still available but shouldn't add much anymore
+- Listing files and drives is done similarly to what SSMS seems to do which means you shouldn't need sysadmin rights anymore
+- Added some fixes to make backing up and restoring work for SQLServer running in a docker container
+
 0.7
 - The suggested name for downloading a backup is the name the backup was given when backing up (Pull request from felhag)
 - When cancelling a backup & download the connection with the database will be closed
