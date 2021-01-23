@@ -50,19 +50,21 @@ public class Restore extends AnAction implements DumbAware {
         c.setTitle("Restore database");
 
         CompletableFuture.runAsync(() -> {
-            var target = QueryHelper.getDatabase(e).map(DasObject::getName).orElseGet(() -> invokeAndWait(this::promptDatabaseName));
-            if (target == null) {
-                return;
-            }
-
-            c.setTitle("Restore " + target);
-            var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target + "'", FileDialog.DialogType.LOAD));
+            c.setTitle("Restore database");
+            var target = QueryHelper.getDatabase(e).map(DasObject::getName);
+            var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target.orElse("new database") + "'", FileDialog.DialogType.LOAD));
             if (file == null) {
                 return;
             }
 
+            var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(StringUtils.removeEnd(StringUtils.removeEnd(file.getName(), ".gzip"), ".bak"))));
+            if (StringUtils.isBlank(database)) {
+                return;
+            }
+
+            c.setTitle("Restore " + database);
             try {
-                checkDatabaseInUse(e.getProject(), c, target);
+                checkDatabaseInUse(e.getProject(), c, database);
             } catch (Exception ex) {
                 Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "Unable to determine database usage or close connections: " + ex.getMessage(), NotificationType.ERROR));
             }
@@ -70,7 +72,7 @@ public class Restore extends AnAction implements DumbAware {
             c.open();
             new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
                 try {
-                    new RestoreHelper(c, target, file.getPath(), consumer).unzipIfNeeded()
+                    new RestoreHelper(c, database, file.getPath(), consumer).unzipIfNeeded()
                             .restore()
                             .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
                             .thenRun(c::close).exceptionally(c::close)
@@ -118,8 +120,8 @@ public class Restore extends AnAction implements DumbAware {
                 }).get();
     }
 
-    private String promptDatabaseName() {
-        var name = Messages.showInputDialog("Create a new database from backup", "Database name", null);
+    private String promptDatabaseName(String initial) {
+        var name = Messages.showInputDialog("Create a new database from backup", "Database name", null, initial, null);
         return StringUtils.stripToNull(name);
     }
 
