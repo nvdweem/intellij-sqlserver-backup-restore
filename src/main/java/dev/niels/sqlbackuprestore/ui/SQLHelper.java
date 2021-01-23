@@ -24,12 +24,12 @@ public interface SQLHelper {
         return connection.getResult("create table #fixdrv ( Name sysname NOT NULL, Size int NOT NULL, Type sysname NULL )\n" +
                 "if exists (select 1 from sys.all_objects where name='dm_os_enumerate_fixed_drives' and type ='V' and is_ms_shipped = 1)\n" +
                 "begin\n" +
-                "    insert #fixdrv select SUBSTRING(fixed_drive_path, 1, 1), free_space_in_bytes/(1024*1024), drive_type_desc from sys.dm_os_enumerate_fixed_drives      \n" +
+                "    insert #fixdrv select fixed_drive_path, free_space_in_bytes/(1024*1024), drive_type_desc from sys.dm_os_enumerate_fixed_drives      \n" +
                 "end\n" +
                 "else\n" +
                 "begin\n" +
                 "    insert #fixdrv (Name, Size) EXECUTE master.dbo.xp_fixeddrives \n" +
-                "    update #fixdrv set Type = 'Fixed' where Type IS NULL \n" +
+                "    update #fixdrv set Name = Name + ':/', Type = 'Fixed' where Type IS NULL \n" +
                 "end\n" +
                 "select * from #fixdrv;\n" +
                 "drop table #fixdrv;").get(10, TimeUnit.SECONDS);

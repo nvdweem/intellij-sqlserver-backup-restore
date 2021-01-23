@@ -71,17 +71,17 @@ public class Restore extends AnAction implements DumbAware {
             new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
                 try {
                     new RestoreHelper(c, target, file.getPath(), consumer).unzipIfNeeded()
-                                                                          .restore()
-                                                                          .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
-                                                                          .thenRun(c::close).exceptionally(c::close)
-                                                                          .get();
+                            .restore()
+                            .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
+                            .thenRun(c::close).exceptionally(c::close)
+                            .get();
                 } catch (Exception ex) {
                     Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, ex.getMessage(), NotificationType.ERROR));
                 }
             }).queue();
         })
-                         .thenRun(c::close)
-                         .exceptionally(c::close);
+                .thenRun(c::close)
+                .exceptionally(c::close);
     }
 
     private void checkDatabaseInUse(Project project, Client c, String target) throws ExecutionException, InterruptedException {
@@ -101,21 +101,21 @@ public class Restore extends AnAction implements DumbAware {
                 "where db_name(p.dbid) = '%s'\n" +
                 "ORDER BY s.session_id;", target), x -> {
         })
-         .thenCompose(rows -> {
-             if (!rows.isEmpty() && Messages.YES == invokeAndWait(() -> Messages.showYesNoDialog(project,
-                     String.format("There are %s sessions active on this database, do you want to close those?", rows.size()),
-                     "Close connections?",
-                     Messages.getQuestionIcon()))) {
+                .thenCompose(rows -> {
+                    if (!rows.isEmpty() && Messages.YES == invokeAndWait(() -> Messages.showYesNoDialog(project,
+                            String.format("There are %s sessions active on this database, do you want to close those?", rows.size()),
+                            "Close connections?",
+                            Messages.getQuestionIcon()))) {
 
-                 CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
-                 for (Map<String, Object> row : rows) {
-                     chain = chain.thenRun(() -> c.execute("KILL " + row.get("Session ID")));
-                 }
-                 return chain;
-             } else {
-                 return CompletableFuture.completedFuture(null);
-             }
-         }).get();
+                        CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
+                        for (Map<String, Object> row : rows) {
+                            chain = chain.thenRun(() -> c.execute("KILL " + row.get("Session ID")));
+                        }
+                        return chain;
+                    } else {
+                        return CompletableFuture.completedFuture(null);
+                    }
+                }).get();
     }
 
     private String promptDatabaseName() {
@@ -166,9 +166,9 @@ public class Restore extends AnAction implements DumbAware {
 
         public CompletableFuture<Void> restore() {
             return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
-                             .thenCompose(this::createRestoreQuery)
-                             .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
-                             .thenApply(x -> null);
+                    .thenCompose(this::createRestoreQuery)
+                    .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
+                    .thenApply(x -> null);
         }
 
         private CompletableFuture<String> createRestoreQuery(List<Map<String, Object>> maps) {
@@ -194,7 +194,7 @@ public class Restore extends AnAction implements DumbAware {
         }
 
         private CompletableFuture<String> determineTargetPath() {
-            var path = "LEFT(physical_name,LEN(physical_name)-CHARINDEX('\\',REVERSE(physical_name))+1)";
+            var path = "LEFT(physical_name,LEN(physical_name)-(CHARINDEX('\\',REVERSE(physical_name)) + CHARINDEX('/',REVERSE(physical_name)))+1)";
             var pathQuery = "SELECT top 1 " + path + " path, count(*)\n" +
                     "    FROM sys.master_files mf\n" +
                     "    INNER JOIN sys.[databases] d ON mf.[database_id] = d.[database_id]  \n" +
