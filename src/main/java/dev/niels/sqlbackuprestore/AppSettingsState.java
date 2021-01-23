@@ -18,6 +18,7 @@ public class AppSettingsState implements PersistentStateComponent<AppSettingsSta
     private long compressionSize = 0L;
     private boolean useCompressedBackup = true;
     private boolean useDbNameOnDownload = false;
+    private boolean askForRestoreFileLocations = false;
 
     public static AppSettingsState getInstance() {
         return ServiceManager.getService(AppSettingsState.class);

@@ -1,8 +1,10 @@
 package dev.niels.sqlbackuprestore.ui;
 
 import com.intellij.ui.components.JBCheckBox;
+import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
+import com.intellij.util.ui.UIUtil;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import lombok.Getter;
 import org.apache.commons.lang.math.NumberUtils;
@@ -13,19 +15,23 @@ public class AppSettingsComponent {
     @Getter
     private final JPanel mainPanel;
     private final JBTextField compressionSize = new JBTextField();
-    private final JBCheckBox useCompressedBackup = new JBCheckBox();
-    private final JBCheckBox useDbNameOnDownload = new JBCheckBox();
+    private final JBCheckBox useCompressedBackup = new JBCheckBox("Use compressed backups");
+    private final JBCheckBox useDbNameOnDownload = new JBCheckBox("Use DB name on backup and download");
+    private final JBCheckBox askForRestoreFileLocations = new JBCheckBox("Ask for file locations when restoring");
 
     public AppSettingsComponent() {
         mainPanel = FormBuilder.createFormBuilder()
-                .addLabeledComponent("Use compressed backups", useCompressedBackup)
-                .addTooltip("This is supported for SQL2008+")
+                .addComponent(useCompressedBackup)
+                .addComponent(new JBLabel("This is supported for SQL2008+", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addVerticalGap(1)
                 .addLabeledComponent("Ask for compression when downloading file bigger than (MB)", compressionSize)
-                .addTooltip("0 or empty to always ask.")
-                .addTooltip("Compressed backups will be way faster but this might make a little bit")
-                .addTooltip("of a difference.")
-                .addLabeledComponent("Use DB name on backup and download", useDbNameOnDownload)
-                .addTooltip("By default the name of the backup filename will be used")
+                .addComponent(new JBLabel("0 or empty to always ask.", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addComponent(new JBLabel("Compressed backups will be faster but this might make the backup slightly smaller.", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addVerticalGap(1)
+                .addComponent(useDbNameOnDownload)
+                .addComponent(new JBLabel("By default the name of the backup filename will be used", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addVerticalGap(1)
+                .addComponent(askForRestoreFileLocations)
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
     }
@@ -35,6 +41,7 @@ public class AppSettingsComponent {
         var modified = !parse(compressionSize.getText()).equals(current.getCompressionSize());
         modified |= useCompressedBackup.isSelected() != current.isUseCompressedBackup();
         modified |= useDbNameOnDownload.isSelected() != current.isUseDbNameOnDownload();
+        modified |= askForRestoreFileLocations.isSelected() != current.isAskForRestoreFileLocations();
         return modified;
     }
 
@@ -51,6 +58,7 @@ public class AppSettingsComponent {
         current.setCompressionSize(parse(compressionSize.getText()));
         current.setUseCompressedBackup(useCompressedBackup.isSelected());
         current.setUseDbNameOnDownload(useDbNameOnDownload.isSelected());
+        current.setAskForRestoreFileLocations(askForRestoreFileLocations.isSelected());
     }
 
     public void reset() {
@@ -58,5 +66,6 @@ public class AppSettingsComponent {
         compressionSize.setText(current.getCompressionSize() == 0L ? "" : "" + current.getCompressionSize());
         useCompressedBackup.setSelected(current.isUseCompressedBackup());
         useDbNameOnDownload.setSelected(current.isUseDbNameOnDownload());
+        askForRestoreFileLocations.setSelected(current.isAskForRestoreFileLocations());
     }
 }

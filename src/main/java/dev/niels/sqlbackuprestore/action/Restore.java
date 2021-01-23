@@ -12,13 +12,16 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAware;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Auditor;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
+import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
 import lombok.AllArgsConstructor;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -166,25 +169,43 @@ public class Restore extends AnAction implements DumbAware {
             return this;
         }
 
-        public CompletableFuture<Void> restore() {
+        public CompletableFuture<Object> restore() {
+            var temp = new RestoreTemp();
             return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
-                    .thenCompose(this::createRestoreQuery)
+                    .thenApply(temp::setFiles)
+                    .thenCompose(x -> determineTargetPath())
+                    .thenApply(temp::setLocation)
+                    .thenAccept(this::defaultFileNames)
+                    .thenRun(() -> {
+                        if (AppSettingsState.getInstance().isAskForRestoreFileLocations()) {
+                            askForFileLocations(temp);
+                        }
+                    })
+                    .thenApply(v -> temp.files.stream().map(s -> String.format("MOVE N'%s' TO N'%s'", s.get("LogicalName"), s.get("RestoreAs"))).collect(Collectors.joining(", ")))
+                    .thenApply(moves -> String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, %s, NOUNLOAD, STATS = 5, REPLACE", target, file, moves))
+
                     .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
-                    .thenApply(x -> null);
+                    .thenApply(x -> null)
+                    .exceptionally(e -> null);
         }
 
-        private CompletableFuture<String> createRestoreQuery(List<Map<String, Object>> maps) {
-            return determineTargetPath()
-                    .thenApply(path -> maps.stream().map(v -> determineFileName(path, v)).collect(Collectors.joining(",")))
-                    .thenApply(moves -> String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, %s, NOUNLOAD, STATS = 5, REPLACE", target, file, moves));
+        private Object defaultFileNames(RestoreTemp temp) {
+            temp.getFiles().stream().forEach(v -> v.put("RestoreAs", determineFileName(temp.getLocation(), v)));
+            return null;
+        }
+
+        private void askForFileLocations(RestoreTemp files) {
+            ApplicationManager.getApplication().invokeAndWait(() -> {
+                if (!new RestoreFilenamesDialog(null, files).showAndGet()) {
+                    throw new RuntimeException("Restore cancelled");
+                }
+            });
         }
 
         private String determineFileName(String path, Map<String, Object> values) {
-            var name = (String) values.get("LogicalName");
             var type = (String) values.get("Type");
             var ext = StringUtils.equalsIgnoreCase(type, "L") ? "_log.ldf" : ".mdf";
-
-            return String.format("MOVE N'%s' TO N'%s'", name, StringUtils.stripEnd(path, "/\\") + '\\' + uniqueName(target, ext));
+            return StringUtils.stripEnd(path, "/\\") + '\\' + uniqueName(target, ext);
         }
 
         private String uniqueName(String target, String ext) {
@@ -196,7 +217,8 @@ public class Restore extends AnAction implements DumbAware {
         }
 
         private CompletableFuture<String> determineTargetPath() {
-            var path = "LEFT(physical_name,LEN(physical_name)-(CHARINDEX('\\',REVERSE(physical_name)) + CHARINDEX('/',REVERSE(physical_name)))+1)";
+            var max = "case when CHARINDEX('\\',REVERSE(physical_name)) > CHARINDEX('/',REVERSE(physical_name)) then CHARINDEX('\\',REVERSE(physical_name)) else CHARINDEX('/',REVERSE(physical_name)) end";
+            var path = "LEFT(physical_name,LEN(physical_name)-(" + max + ")+1)";
             var pathQuery = "SELECT top 1 " + path + " path, count(*)\n" +
                     "    FROM sys.master_files mf\n" +
                     "    INNER JOIN sys.[databases] d ON mf.[database_id] = d.[database_id]  \n" +
@@ -212,5 +234,11 @@ public class Restore extends AnAction implements DumbAware {
             }
             progressConsumer.accept(warning);
         }
+    }
+
+    @Data
+    public static class RestoreTemp {
+        private List<Map<String, Object>> files;
+        private String location;
     }
 }

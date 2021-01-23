@@ -21,6 +21,7 @@ Built for 2020.1 and higher because the internal database api has changed in tha
 - Added setting to do compressed backups. The previous compression options are still available but shouldn't add much anymore
 - Listing files and drives is done similarly to what SSMS seems to do which means you shouldn't need sysadmin rights anymore
 - Added some fixes to make backing up and restoring work for SQLServer running in a docker container
+- Allow changing filenames when restoring a backup
 
 0.7
 - The suggested name for downloading a backup is the name the backup was given when backing up (Pull request from felhag)
