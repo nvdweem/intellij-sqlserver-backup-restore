@@ -287,7 +287,7 @@ public class FileDialog {
         public RemoteFile(DatabaseFileSystem databaseFileSystem, RemoteFile parent, String path, boolean directory, boolean exists) {
             this.databaseFileSystem = databaseFileSystem;
             this.parent = parent;
-            this.path = path;
+            this.path = StringUtils.stripEnd(path, "\\");
             this.directory = directory;
             this.exists = exists;
         }
