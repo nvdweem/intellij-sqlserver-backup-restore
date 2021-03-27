@@ -1,4 +1,6 @@
 # intellij-sqlserver-backup-restore
+[Plugin on Jetbrains website](https://plugins.jetbrains.com/plugin/13913)
+
 A plugin that allows creating backups and restoring them from the DataGrip context for Microsoft SQLServer databases. <br>
 <br>
 The plugin built for my own personal use case which means that it will work for databases that are connected through an SSH tunnel.
@@ -10,9 +12,10 @@ Features:<br>
   <li> Creating a backup, storing it and download it right after </li>
   <li> Reading a backup into an existing database </li>
   <li> Reading a backup into a newly created database </li>
-</ul><br>
-<br>
+</ul>
 Built for 2020.1 and higher because the internal database api has changed in that version.
+
+**Note:** AWS and probably also Azure don't seem to support file based backing up and are not supported by this plugin.
 
 ## Change notes
 0.8.1
