@@ -17,7 +17,9 @@
       <li> Reading a backup into a newly created database </li>
     </ul><br>
     <br>
-    Built for 2020.1 and higher because the internal database api has changed in that version.
+    Built for 2020.1 and higher because the internal database api has changed in that version.<br>
+    <br>
+    <b> Note: </b> AWS and probably also Azure don't seem to support file based backing up and aren't supported by this plugin.
     ]]></description>
 
     <change-notes><![CDATA[
