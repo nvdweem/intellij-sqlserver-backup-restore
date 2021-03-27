@@ -15,7 +15,7 @@ Features:<br>
 Built for 2020.1 and higher because the internal database api has changed in that version.
 
 ## Change notes
-0.9
+0.8.1
 - SQLServer backup compression won't be done for Express, 'Express with Advanced Services' and Web editions even if it's turned on because they don't support it 
 
 0.8
