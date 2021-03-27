@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -25,6 +26,14 @@ import java.util.concurrent.CompletableFuture;
  */
 @Slf4j
 public class Backup extends AnAction implements DumbAware {
+    // https://docs.microsoft.com/en-us/sql/t-sql/functions/serverproperty-transact-sql?view=sql-server-ver15
+    // https://docs.microsoft.com/en-us/sql/sql-server/editions-and-components-of-sql-server-version-15?view=sql-server-ver15#RDBMSHA
+    private static final Set<String> editionIdsWithoutCompressionSupport = Set.of(
+            "-1592396055", // Express
+            "-133711905", // Express with Advanced Services
+            "1293598313" // Web
+    );
+
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
@@ -62,7 +71,9 @@ public class Backup extends AnAction implements DumbAware {
 
         c.open();
         c.setTitle("Backup " + name);
-        var future = c.execute("BACKUP DATABASE [" + name + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD" + (AppSettingsState.getInstance().isUseCompressedBackup() ? ", COMPRESSION" : "") + ", STATS = 10")
+
+        var future = determineCompression(c)
+                .thenCompose(compress -> c.execute("BACKUP DATABASE [" + name + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD" + compress + ", STATS = 10"))
                 .thenApply(c::closeAndReturn)
                 .exceptionally(c::close)
                 .thenCompose(x -> c.getSingle(String.format("USE [%s] exec sp_spaceused @oneresultset = 1", name), "reserved", String.class)
@@ -84,5 +95,18 @@ public class Backup extends AnAction implements DumbAware {
             }
         }).queue();
         return future;
+    }
+
+    private CompletableFuture<String> determineCompression(Client c) {
+        if (!AppSettingsState.getInstance().isUseCompressedBackup()) {
+            return CompletableFuture.completedFuture("");
+        }
+        return c.<String>getSingle("SELECT cast(SERVERPROPERTY('EditionID') as varchar(20)) AS edition", "edition") // EditionID is supposed to be a bigint but returns as String. Cast to be super sure.
+                .thenApply(id -> {
+                    var result = !editionIdsWithoutCompressionSupport.contains(id);
+                    log.info("Version {} does {}support compression", id, result ? "" : "not ");
+                    return result;
+                })
+                .thenApply(compress -> compress ? ", COMPRESSION" : "");
     }
 }

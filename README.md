@@ -15,6 +15,9 @@ Features:<br>
 Built for 2020.1 and higher because the internal database api has changed in that version.
 
 ## Change notes
+0.9
+- SQLServer backup compression won't be done for Express, 'Express with Advanced Services' and Web editions even if it's turned on because they don't support it 
+
 0.8
 - gzipped files can be restored without needing to manually unzip them (Pull request from felhag)
 - When downloading, the question to compress is asked before loading the backup into the database. This helps with backups that are bigger than 2gb which is the default maximum size for blobs (Pull request from felhag)  
