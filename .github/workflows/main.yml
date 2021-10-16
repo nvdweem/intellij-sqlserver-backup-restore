@@ -22,6 +22,8 @@ jobs:
       run: chmod +x gradlew
     - name: Build with Gradle
       run: ./gradlew build
+      env:
+        ORG_GRADLE_PROJECT_intellijPublishToken: ${{secrets.INTELLIJ_TOKEN}}
     - uses: actions/upload-artifact@v2
       with:
         path: build/distributions/*
