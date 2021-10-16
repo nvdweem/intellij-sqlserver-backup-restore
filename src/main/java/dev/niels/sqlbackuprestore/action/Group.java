@@ -10,4 +10,9 @@ public class Group extends DefaultActionGroup {
     public void update(@NotNull AnActionEvent e) {
         e.getPresentation().setEnabledAndVisible(QueryHelper.isMssql(e));
     }
+
+    @Override
+    public boolean isDumbAware() {
+        return true;
+    }
 }

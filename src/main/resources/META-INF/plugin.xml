@@ -23,6 +23,9 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        1.0
+        - Plugin can be used while IntelliJ is indexing
+
         0.8.1
         - SQLServer backup compression won't be done for Express, 'Express with Advanced Services' and Web editions even if it's turned on because they don't support it
 

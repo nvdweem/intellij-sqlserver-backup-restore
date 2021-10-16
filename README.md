@@ -18,6 +18,9 @@ Built for 2020.1 and higher because the internal database api has changed in tha
 **Note:** AWS and probably also Azure don't seem to support file based backing up and are not supported by this plugin.
 
 ## Change notes
+1.0
+- Plugin can be used while IntelliJ is indexing
+
 0.8.1
 - SQLServer backup compression won't be done for Express, 'Express with Advanced Services' and Web editions even if it's turned on because they don't support it 
 

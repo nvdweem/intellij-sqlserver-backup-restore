@@ -3,10 +3,9 @@ package dev.niels.sqlbackuprestore.action;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
-import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.project.DumbAware;
+import com.intellij.openapi.project.DumbAwareAction;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Auditor;
@@ -25,7 +24,7 @@ import java.util.concurrent.CompletableFuture;
  * Backup database to a file
  */
 @Slf4j
-public class Backup extends AnAction implements DumbAware {
+public class Backup extends DumbAwareAction {
     // https://docs.microsoft.com/en-us/sql/t-sql/functions/serverproperty-transact-sql?view=sql-server-ver15
     // https://docs.microsoft.com/en-us/sql/sql-server/editions-and-components-of-sql-server-version-15?view=sql-server-ver15#RDBMSHA
     private static final Set<String> editionIdsWithoutCompressionSupport = Set.of(

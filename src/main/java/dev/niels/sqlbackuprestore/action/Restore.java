@@ -6,10 +6,9 @@ import com.intellij.database.view.DatabaseContextFun;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
-import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
-import com.intellij.openapi.project.DumbAware;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import dev.niels.sqlbackuprestore.AppSettingsState;
@@ -46,7 +45,7 @@ import java.util.zip.GZIPInputStream;
  * Restore a database from a (remote) file. Cannot be a gzipped file.
  */
 @Slf4j
-public class Restore extends AnAction implements DumbAware {
+public class Restore extends DumbAwareAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         var c = QueryHelper.client(e);

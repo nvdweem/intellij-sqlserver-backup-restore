@@ -6,14 +6,13 @@ import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
-import com.intellij.openapi.actionSystem.AnAction;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooserFactory;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.progress.ProgressIndicator;
 import com.intellij.openapi.progress.Task;
-import com.intellij.openapi.project.DumbAware;
+import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -38,7 +37,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Triggers backup and then allows downloading the result
  */
-public class Download extends AnAction implements DumbAware {
+public class Download extends DumbAwareAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         try (var c = QueryHelper.client(e)) {
