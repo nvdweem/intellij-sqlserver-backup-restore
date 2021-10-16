@@ -22,10 +22,10 @@ jobs:
     - name: Get the tag name
       run: echo "TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
     - name: Regular build
-      if: ${{ env.TAG == '' }}
+      if: ${{ env.TAG == 'refs/heads/master' }}
       run: echo Regular build ${{ env.TAG }}
     - name: Build tag
-      if: ${{ env.TAG != '' }}
+      if: ${{ env.TAG != 'refs/heads/master' }}
       run: echo Tag build ${{ env.TAG }}
 
 #    - name: Build with Gradle
