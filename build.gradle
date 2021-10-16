@@ -17,13 +17,13 @@ dependencies {
 
 // See https://github.com/JetBrains/gradle-intellij-plugin/
 intellij {
-    version 'LATEST-EAP-SNAPSHOT'
+    version '2021.2.1'
     type 'IU'
     plugins = ['DatabaseTools']
     downloadSources true
 }
 patchPluginXml {
-    sinceBuild = '202.7319'
+    sinceBuild = '212.5080'
     untilBuild = ''
 }
 publishPlugin {

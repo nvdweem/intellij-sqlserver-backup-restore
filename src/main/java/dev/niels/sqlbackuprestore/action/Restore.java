@@ -2,7 +2,7 @@ package dev.niels.sqlbackuprestore.action;
 
 import com.intellij.database.actions.RefreshSchemaAction;
 import com.intellij.database.model.DasObject;
-import com.intellij.database.view.DatabaseView;
+import com.intellij.database.view.DatabaseContextFun;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications;
@@ -53,59 +53,59 @@ public class Restore extends AnAction implements DumbAware {
         c.setTitle("Restore database");
 
         CompletableFuture.runAsync(() -> {
-            c.setTitle("Restore database");
-            var target = QueryHelper.getDatabase(e).map(DasObject::getName);
-            var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target.orElse("new database") + "'", FileDialog.DialogType.LOAD));
-            if (file == null) {
-                return;
-            }
+                    c.setTitle("Restore database");
+                    var target = QueryHelper.getDatabase(e).map(DasObject::getName);
+                    var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target.orElse("new database") + "'", FileDialog.DialogType.LOAD));
+                    if (file == null) {
+                        return;
+                    }
 
-            var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(StringUtils.removeEnd(StringUtils.removeEnd(file.getName(), ".gzip"), ".bak"))));
-            if (StringUtils.isBlank(database)) {
-                return;
-            }
+                    var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(StringUtils.removeEnd(StringUtils.removeEnd(file.getName(), ".gzip"), ".bak"))));
+                    if (StringUtils.isBlank(database)) {
+                        return;
+                    }
 
-            c.setTitle("Restore " + database);
-            try {
-                checkDatabaseInUse(e.getProject(), c, database);
-            } catch (Exception ex) {
-                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "Unable to determine database usage or close connections: " + ex.getMessage(), NotificationType.ERROR));
-            }
+                    c.setTitle("Restore " + database);
+                    try {
+                        checkDatabaseInUse(e.getProject(), c, database);
+                    } catch (Exception ex) {
+                        Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "Unable to determine database usage or close connections: " + ex.getMessage(), NotificationType.ERROR));
+                    }
 
-            c.open();
-            new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
-                try {
-                    new RestoreHelper(c, database, file.getPath(), consumer).unzipIfNeeded()
-                            .restore()
-                            .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseView.getSelectedElementsNoGroups(e.getDataContext(), true)))
-                            .thenRun(c::close).exceptionally(c::close)
-                            .get();
-                } catch (Exception ex) {
-                    Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, ex.getMessage(), NotificationType.ERROR));
-                }
-            }).queue();
-        })
+                    c.open();
+                    new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
+                        try {
+                            new RestoreHelper(c, database, file.getPath(), consumer).unzipIfNeeded()
+                                    .restore()
+                                    .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseContextFun.getSelectedDbElementsWithParentsForGroups(e.getDataContext())))
+                                    .thenRun(c::close).exceptionally(c::close)
+                                    .get();
+                        } catch (Exception ex) {
+                            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, ex.getMessage(), NotificationType.ERROR));
+                        }
+                    }).queue();
+                })
                 .thenRun(c::close)
                 .exceptionally(c::close);
     }
 
     private void checkDatabaseInUse(Project project, Client c, String target) throws ExecutionException, InterruptedException {
         c.withRows(String.format("SELECT\n" +
-                "    [Session ID]    = s.session_id,\n" +
-                "    [User Process]  = CONVERT(CHAR(1), s.is_user_process),\n" +
-                "    [Login]         = s.login_name,\n" +
-                "    [Application]   = ISNULL(s.program_name, N''),\n" +
-                "    [Open Transactions] = ISNULL(r.open_transaction_count,0),\n" +
-                "    [Last Request Start Time] = s.last_request_start_time,\n" +
-                "    [Host Name]     = ISNULL(s.host_name, N''),\n" +
-                "    [Net Address]   = ISNULL(c.client_net_address, N'')\n" +
-                "FROM sys.dm_exec_sessions s\n" +
-                "LEFT OUTER JOIN sys.dm_exec_connections c ON (s.session_id = c.session_id)\n" +
-                "LEFT OUTER JOIN sys.dm_exec_requests r ON (s.session_id = r.session_id)\n" +
-                "LEFT OUTER JOIN sys.sysprocesses p ON (s.session_id = p.spid)\n" +
-                "where db_name(p.dbid) = '%s'\n" +
-                "ORDER BY s.session_id;", target), x -> {
-        })
+                        "    [Session ID]    = s.session_id,\n" +
+                        "    [User Process]  = CONVERT(CHAR(1), s.is_user_process),\n" +
+                        "    [Login]         = s.login_name,\n" +
+                        "    [Application]   = ISNULL(s.program_name, N''),\n" +
+                        "    [Open Transactions] = ISNULL(r.open_transaction_count,0),\n" +
+                        "    [Last Request Start Time] = s.last_request_start_time,\n" +
+                        "    [Host Name]     = ISNULL(s.host_name, N''),\n" +
+                        "    [Net Address]   = ISNULL(c.client_net_address, N'')\n" +
+                        "FROM sys.dm_exec_sessions s\n" +
+                        "LEFT OUTER JOIN sys.dm_exec_connections c ON (s.session_id = c.session_id)\n" +
+                        "LEFT OUTER JOIN sys.dm_exec_requests r ON (s.session_id = r.session_id)\n" +
+                        "LEFT OUTER JOIN sys.sysprocesses p ON (s.session_id = p.spid)\n" +
+                        "where db_name(p.dbid) = '%s'\n" +
+                        "ORDER BY s.session_id;", target), x -> {
+                })
                 .thenCompose(rows -> {
                     if (!rows.isEmpty() && Messages.YES == invokeAndWait(() -> Messages.showYesNoDialog(project,
                             String.format("There are %s sessions active on this database, do you want to close those?", rows.size()),
