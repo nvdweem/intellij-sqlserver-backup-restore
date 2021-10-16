@@ -13,7 +13,6 @@ Features:<br>
   <li> Reading a backup into an existing database </li>
   <li> Reading a backup into a newly created database </li>
 </ul>
-Built for 2020.1 and higher because the internal database api has changed in that version.
 
 **Note:** AWS and probably also Azure don't seem to support file based backing up and are not supported by this plugin.
 
