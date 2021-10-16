@@ -11,27 +11,26 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-#    - name: Set up JDK 11
-#      uses: actions/setup-java@v2
-#      with:
-#        java-version: '11'
-#        distribution: 'adopt'
-#        cache: gradle
-#    - name: Grant execute permission for gradlew
-#      run: chmod +x gradlew
+    - name: Set up JDK 11
+      uses: actions/setup-java@v2
+      with:
+        java-version: '11'
+        distribution: 'adopt'
+        cache: gradle
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
     - name: Get the tag name
       run: echo "TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
     - name: Regular build
       if: ${{ env.TAG == 'refs/heads/master' }}
-      run: echo Regular build ${{ env.TAG }}
-    - name: Build tag
+      run: ./gradlew build
+      env:
+        ORG_GRADLE_PROJECT_intellijPublishToken: ${{secrets.INTELLIJ_TOKEN}}
+    - name: Deploy tag
       if: ${{ env.TAG != 'refs/heads/master' }}
-      run: echo Tag build ${{ env.TAG }}
-
-#    - name: Build with Gradle
-#      run: ./gradlew build
-#      env:
-#        ORG_GRADLE_PROJECT_intellijPublishToken: ${{secrets.INTELLIJ_TOKEN}}
-#    - uses: actions/upload-artifact@v2
-#      with:
-#        path: build/distributions/*
+      run: ./gradlew publishPlugin
+      env:
+        ORG_GRADLE_PROJECT_intellijPublishToken: ${{secrets.INTELLIJ_TOKEN}}
+    - uses: actions/upload-artifact@v2
+      with:
+        path: build/distributions/*
