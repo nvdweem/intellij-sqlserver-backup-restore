@@ -17,10 +17,10 @@ import java.util.stream.Collectors;
 @Slf4j
 public class Query extends DataRequest.RawQueryRequest {
     private final Consumer<Pair<List<Column>, List<Row>>> consumer;
+    private final List<Map<String, Object>> result = new ArrayList<>();
     private List<Column> columns;
-    private List<Map<String, Object>> result = new ArrayList<>();
     @Getter
-    private CompletableFuture<List<Map<String, Object>>> future = new CompletableFuture<>();
+    private final CompletableFuture<List<Map<String, Object>>> future = new CompletableFuture<>();
 
     protected Query(Client c, Owner owner, String query, Consumer<Pair<List<Column>, List<Row>>> consumer) {
         super(owner, query, DataRequest.newConstraints(0, 5000, 0, 0));

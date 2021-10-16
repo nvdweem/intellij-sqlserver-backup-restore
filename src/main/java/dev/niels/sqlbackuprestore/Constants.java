@@ -1,6 +1,7 @@
 package dev.niels.sqlbackuprestore;
 
 import com.intellij.database.dataSource.connection.DatabaseDepartment;
+import org.jetbrains.annotations.NotNull;
 
 import javax.swing.Icon;
 
@@ -12,12 +13,12 @@ public class Constants {
     }
 
     public static final DatabaseDepartment databaseDepartment = new DatabaseDepartment() {
-        @Override
+        @NotNull @Override
         public String getDepartmentName() {
             return "MSSQL Department name";
         }
 
-        @Override
+        @NotNull @Override
         public String getCommonName() {
             return "MSSQL Common name";
         }

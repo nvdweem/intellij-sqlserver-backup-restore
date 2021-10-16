@@ -109,7 +109,7 @@ public class Restore extends AnAction implements DumbAware {
                 .thenCompose(rows -> {
                     if (!rows.isEmpty() && Messages.YES == invokeAndWait(() -> Messages.showYesNoDialog(project,
                             String.format("There are %s sessions active on this database, do you want to close those?", rows.size()),
-                            "Close connections?",
+                            "Close Connections?",
                             Messages.getQuestionIcon()))) {
 
                         CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
@@ -124,7 +124,7 @@ public class Restore extends AnAction implements DumbAware {
     }
 
     private String promptDatabaseName(String initial) {
-        var name = Messages.showInputDialog("Create a new database from backup", "Database name", null, initial, null);
+        var name = Messages.showInputDialog("Create a new database from backup", "Database Name", null, initial, null);
         return StringUtils.stripToNull(name);
     }
 
@@ -189,9 +189,8 @@ public class Restore extends AnAction implements DumbAware {
                     .exceptionally(e -> null);
         }
 
-        private Object defaultFileNames(RestoreTemp temp) {
-            temp.getFiles().stream().forEach(v -> v.put("RestoreAs", determineFileName(temp.getLocation(), v)));
-            return null;
+        private void defaultFileNames(RestoreTemp temp) {
+            temp.getFiles().forEach(v -> v.put("RestoreAs", determineFileName(temp.getLocation(), v)));
         }
 
         private void askForFileLocations(RestoreTemp files) {

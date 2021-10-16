@@ -23,7 +23,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Optional;
@@ -357,7 +356,7 @@ public class FileDialog {
         }
 
         @Override
-        public OutputStream getOutputStream(Object requestor, long newModificationStamp, long newTimeStamp) throws IOException {
+        public OutputStream getOutputStream(Object requestor, long newModificationStamp, long newTimeStamp) {
             return null;
         }
 

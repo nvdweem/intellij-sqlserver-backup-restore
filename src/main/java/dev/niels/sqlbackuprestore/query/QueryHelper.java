@@ -16,7 +16,7 @@ import java.util.Optional;
  * Helper to go from actions to table names or connections.
  */
 public abstract class QueryHelper {
-    private static List<Client> clients = new ArrayList<>();
+    private static final List<Client> clients = new ArrayList<>();
 
     private QueryHelper() {
     }

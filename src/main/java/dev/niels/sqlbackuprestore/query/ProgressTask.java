@@ -17,11 +17,11 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 public class ProgressTask extends Task.Backgroundable {
-    private static final Pattern progressPattern = Pattern.compile("\\[3211\\] (\\d+)");
+    private static final Pattern progressPattern = Pattern.compile("\\[3211] (\\d+)");
     private final Consumer<Consumer<Pair<Auditor.MessageType, String>>> run;
     private ProgressIndicator indicator;
 
-    public ProgressTask(@Nullable Project project, @Nls(capitalization = Nls.Capitalization.Title) @NotNull String title, boolean canBeCancelled, Consumer<Consumer<Pair<Auditor.MessageType, String>>> run) {
+    public ProgressTask(@Nullable Project project, @Nls(capitalization = Nls.Capitalization.Sentence) @NotNull String title, boolean canBeCancelled, Consumer<Consumer<Pair<Auditor.MessageType, String>>> run) {
         super(project, title, canBeCancelled);
         this.run = run;
     }

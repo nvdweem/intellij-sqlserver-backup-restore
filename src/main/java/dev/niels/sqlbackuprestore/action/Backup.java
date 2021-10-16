@@ -86,7 +86,7 @@ public class Backup extends AnAction implements DumbAware {
             }
         });
 
-        new ProgressTask(e.getProject(), "Creating Backup", false, consumer -> {
+        new ProgressTask(e.getProject(), "Creating backup", false, consumer -> {
             c.addWarningConsumer(consumer);
             try {
                 future.get();

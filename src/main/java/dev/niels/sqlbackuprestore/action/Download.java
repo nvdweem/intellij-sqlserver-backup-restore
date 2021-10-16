@@ -82,7 +82,7 @@ public class Download extends AnAction implements DumbAware {
         if (AppSettingsState.getInstance().isUseDbNameOnDownload()) {
             fileName = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null) + ".bak";
         }
-        var wrapper = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose local file", "Where to store the downloaded file"), e.getProject()).save(path, fileName);
+        var wrapper = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose Local File", "Where to store the downloaded file"), e.getProject()).save(path, fileName);
         if (wrapper == null) {
             return null;
         }
