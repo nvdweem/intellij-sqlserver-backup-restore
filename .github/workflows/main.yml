@@ -28,7 +28,7 @@ jobs:
         ORG_GRADLE_PROJECT_intellijPublishToken: ${{secrets.INTELLIJ_TOKEN}}
     - name: Deploy tag
       if: ${{ env.TAG != 'refs/heads/master' }}
-      run: ./gradlew publishPlugin
+      run: ./gradlew -Pversion=${{ env.TAG }} publishPlugin
       env:
         ORG_GRADLE_PROJECT_intellijPublishToken: ${{secrets.INTELLIJ_TOKEN}}
     - uses: actions/upload-artifact@v2
