@@ -31,6 +31,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.sql.SQLException;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -55,7 +56,7 @@ public class Download extends DumbAwareAction {
                         var col = compressed.get() ? "COMPRESS(BulkColumn)" : "BulkColumn";
 
                         c.execute("SELECT CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
-                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f);"))
+                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f) where 1=1;"))
                                 .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
                                     var name = source.getName() + (compressed.get() ? ".gzip" : "");
                                     var target = getFile(e, name);
@@ -75,7 +76,7 @@ public class Download extends DumbAwareAction {
 
     @Nullable
     private File getFile(@NotNull AnActionEvent e, String fileName) {
-        var property = PropertiesComponent.getInstance(e.getProject()).getValue(FileDialog.KEY_PREFIX + "download");
+        var property = PropertiesComponent.getInstance(Objects.requireNonNull(e.getProject())).getValue(FileDialog.KEY_PREFIX + "download");
         var path = property == null ? null : LocalFileSystem.getInstance().findFileByPath(property);
 
         if (AppSettingsState.getInstance().isUseDbNameOnDownload()) {
