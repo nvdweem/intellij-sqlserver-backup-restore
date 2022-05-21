@@ -17,6 +17,9 @@ Features:<br>
 **Note:** AWS and probably also Azure don't seem to support file based backing up and are not supported by this plugin.
 
 ## Change notes
+1.0.1
+- Added support for IntelliJ 2022.2
+
 1.0
 - Plugin can be used while IntelliJ is indexing
 - Downloading the backup doesn't trigger the unsafe query error anymore

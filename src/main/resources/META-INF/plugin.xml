@@ -21,20 +21,12 @@
     ]]></description>
 
     <change-notes><![CDATA[
-        1.0
-        - Plugin can be used while IntelliJ is indexing
+        1.0.1<br/>
+        - Added support for IntelliJ 2022.2<br/>
+        <br/>
+        1.0<br/>
+        - Plugin can be used while IntelliJ is indexing<br/>
         - Downloading the backup doesn't trigger the unsafe query error anymore
-
-        0.8.1
-        - SQLServer backup compression won't be done for Express, 'Express with Advanced Services' and Web editions even if it's turned on because they don't support it
-
-        0.8.0
-        - gzipped files can be restored without needing to manually unzip them (Pull request from felhag)<br/>
-        - When downloading, the question to compress is asked before loading the backup into the database. This helps with backups that are bigger than 2gb which is the default maximum size for blobs (Pull request from felhag)<br/>
-        - Added setting to do compressed backups. The previous compression options are still available but shouldn't add much anymore<br/>
-        - Listing files and drives is done similarly to what SSMS seems to do which means you shouldn't need sysadmin rights anymore<br/>
-        - Added some fixes to make backing up and restoring work for SQLServer running in a docker container<br/>
-        - Allow changing filenames when restoring a backup<br/>
     ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
