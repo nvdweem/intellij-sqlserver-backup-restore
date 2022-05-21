@@ -71,3 +71,9 @@ Features:<br>
 
 0.1
 - Initial version. Seems to work fine locally :).
+
+# Docker mssql for Linux testing
+```
+/mnt/user/temp
+docker run -it --rm -e "ACCEPT_EULA=Y" -e "SA_PASSWORD=mypass1!" -p 1433:1433 -v /mnt/user/temp:/opt/backups mcr.microsoft.com/mssql/server:2019-latest
+```
