@@ -160,9 +160,9 @@ public class Download extends DumbAwareAction {
                     }
 
                     // Get the next part and store it
-                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part, part), cr -> {
+                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part, part), (cols, rows) -> {
                         try {
-                            write(fos, cr.getRight().get(0).getValue(0));
+                            write(fos, rows.get(0).getValue(0));
                             indicator.setFraction(current / parts);
                             indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
                         } catch (Exception e) {

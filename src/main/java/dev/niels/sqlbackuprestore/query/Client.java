@@ -3,20 +3,19 @@ package dev.niels.sqlbackuprestore.query;
 import com.intellij.database.console.client.DatabaseSessionClient;
 import com.intellij.database.console.session.DatabaseSessionManager;
 import com.intellij.database.dataSource.LocalDataSource;
-import com.intellij.database.datagrid.DataConsumer;
-import com.intellij.database.datagrid.DataConsumer.Column;
 import com.intellij.database.datagrid.DataRequest.Disconnect;
+import com.intellij.database.datagrid.GridColumn;
+import com.intellij.database.datagrid.GridRow;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import lombok.Getter;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 public class Client implements AutoCloseable {
     private final DatabaseSessionClient dbClient;
@@ -26,7 +25,7 @@ public class Client implements AutoCloseable {
     private int useCount = 1;
 
     public Client(Project project, LocalDataSource dataSource) {
-        dbClient = DatabaseSessionManager.facade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
+        dbClient = DatabaseSessionManager.getFacade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
         dbName = dataSource.getName();
         auditor = new Auditor();
         dbClient.getMessageBus().addAuditor(auditor);
@@ -36,12 +35,12 @@ public class Client implements AutoCloseable {
         dbClient.getSession().setTitle(title);
     }
 
-    public Client addWarningConsumer(Consumer<Pair<MessageType, String>> consumer) {
+    public Client addWarningConsumer(BiConsumer<MessageType, String> consumer) {
         auditor.addWarningConsumer(consumer);
         return this;
     }
 
-    private CompletableFuture<List<Map<String, Object>>> getResult(String query, Consumer<Pair<List<Column>, List<DataConsumer.Row>>> consumer) {
+    private CompletableFuture<List<Map<String, Object>>> getResult(String query, BiConsumer<List<GridColumn>, List<GridRow>> consumer) {
         var table = new Query(this, dbClient, query, consumer);
         dbClient.getMessageBus().getDataProducer().processRequest(table);
         return table.getFuture();
@@ -68,7 +67,7 @@ public class Client implements AutoCloseable {
         return getSingle(query, column);
     }
 
-    public CompletableFuture<List<Map<String, Object>>> withRows(String query, Consumer<Pair<List<Column>, List<DataConsumer.Row>>> consumer) {
+    public CompletableFuture<List<Map<String, Object>>> withRows(String query, BiConsumer<List<GridColumn>, List<GridRow>> consumer) {
         return getResult(query, consumer);
     }
 
@@ -80,9 +79,8 @@ public class Client implements AutoCloseable {
         dbClient.getMessageBus().getDataProducer().processRequest(new Disconnect(dbClient));
     }
 
-    public Client open() {
+    public void open() {
         ++useCount;
-        return this;
     }
 
     @Override

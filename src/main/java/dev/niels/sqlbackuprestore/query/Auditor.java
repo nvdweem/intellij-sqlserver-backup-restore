@@ -1,32 +1,32 @@
 package dev.niels.sqlbackuprestore.query;
 
+import com.intellij.database.connection.throwable.info.ErrorInfo;
+import com.intellij.database.connection.throwable.info.WarningInfo;
 import com.intellij.database.datagrid.DataAuditor;
 import com.intellij.database.datagrid.DataProducer;
 import com.intellij.database.datagrid.DataRequest;
 import com.intellij.database.datagrid.DataRequest.Context;
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
 import java.util.Set;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 public class Auditor implements DataAuditor {
-    private final Set<Consumer<Pair<MessageType, String>>> consumers = new HashSet<>();
+    private final Set<BiConsumer<MessageType, String>> consumers = new HashSet<>();
 
     public enum MessageType {
         PRINT, WARN, ERROR
     }
 
-    public void addWarningConsumer(Consumer<Pair<MessageType, String>> consumer) {
+    public void addWarningConsumer(BiConsumer<MessageType, String> consumer) {
         consumers.add(consumer);
     }
 
     private void produce(MessageType type, String s) {
         if (!consumers.isEmpty()) {
-            var msg = Pair.of(type, s);
-            consumers.forEach(c -> c.accept(msg));
+            consumers.forEach(c -> c.accept(type, s));
         }
     }
 
@@ -35,14 +35,12 @@ public class Auditor implements DataAuditor {
         produce(MessageType.PRINT, s);
     }
 
-    @Override
-    public void warn(@NotNull Context context, @Nullable String s) {
-        produce(MessageType.WARN, s);
+    @Override public void warn(@NotNull Context context, @NotNull WarningInfo warningInfo) {
+        produce(MessageType.WARN, warningInfo.getMessage());
     }
 
-    @Override
-    public void error(@NotNull Context context, @Nullable String s, @Nullable Throwable throwable) {
-        produce(MessageType.ERROR, s);
+    @Override public void error(@NotNull Context context, @NotNull ErrorInfo errorInfo) {
+        produce(MessageType.ERROR, errorInfo.getMessage());
     }
 
     @Override

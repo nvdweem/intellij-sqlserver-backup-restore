@@ -81,9 +81,9 @@ public class Backup extends DumbAwareAction {
                         .thenApply(kb -> Long.parseLong(StringUtils.removeEnd(kb, " KB")) * 1024)
                         .thenApply(target::setLength));
 
-        c.addWarningConsumer(p -> {
-            if (p.getLeft() == MessageType.ERROR) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", p.getRight(), NotificationType.ERROR));
+        c.addWarningConsumer((type, msg) -> {
+            if (type == MessageType.ERROR) {
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", msg, NotificationType.ERROR));
             }
         });
 

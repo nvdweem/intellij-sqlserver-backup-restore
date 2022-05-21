@@ -1,6 +1,6 @@
 package dev.niels.sqlbackuprestore.action;
 
-import com.intellij.database.actions.RefreshSchemaAction;
+import com.intellij.database.actions.RefreshActionsLogic;
 import com.intellij.database.model.DasObject;
 import com.intellij.database.view.DatabaseContextFun;
 import com.intellij.notification.Notification;
@@ -24,7 +24,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.FileInputStream;
@@ -37,7 +36,7 @@ import java.util.Optional;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
@@ -78,7 +77,7 @@ public class Restore extends DumbAwareAction {
                         try {
                             new RestoreHelper(c, database, file.getPath(), consumer).unzipIfNeeded()
                                     .restore()
-                                    .thenRun(() -> RefreshSchemaAction.refresh(e.getProject(), DatabaseContextFun.getSelectedDbElementsWithParentsForGroups(e.getDataContext())))
+                                    .thenRun(() -> RefreshActionsLogic.refresh(e.getProject(), DatabaseContextFun.getSelectedDbElementsWithParentsForGroups(e.getDataContext())))
                                     .thenRun(c::close).exceptionally(c::close)
                                     .get();
                         } catch (Exception ex) {
@@ -105,7 +104,7 @@ public class Restore extends DumbAwareAction {
                         "LEFT OUTER JOIN sys.dm_exec_requests r ON (s.session_id = r.session_id)\n" +
                         "LEFT OUTER JOIN sys.sysprocesses p ON (s.session_id = p.spid)\n" +
                         "where db_name(p.dbid) = '%s'\n" +
-                        "ORDER BY s.session_id;", target), x -> {
+                        "ORDER BY s.session_id;", target), (cs, rs) -> {
                 })
                 .thenCompose(rows -> {
                     if (!rows.isEmpty() && Messages.YES == invokeAndWait(() -> Messages.showYesNoDialog(project,
@@ -150,7 +149,7 @@ public class Restore extends DumbAwareAction {
         private final Client connection;
         private final String target;
         private String file;
-        private final Consumer<Pair<MessageType, String>> progressConsumer;
+        private final BiConsumer<MessageType, String> progressConsumer;
         private final Map<String, Integer> uniqueNames = new HashMap<>();
 
         public RestoreHelper unzipIfNeeded() {
@@ -228,11 +227,11 @@ public class Restore extends DumbAwareAction {
             return connection.getSingle(pathQuery, "path");
         }
 
-        private void progress(Pair<MessageType, String> warning) {
-            if (warning.getLeft() == MessageType.ERROR) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, warning.getRight(), NotificationType.ERROR));
+        private void progress(MessageType messageType, String warning) {
+            if (messageType == MessageType.ERROR) {
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, warning, NotificationType.ERROR));
             }
-            progressConsumer.accept(warning);
+            progressConsumer.accept(messageType, warning);
         }
     }
 
