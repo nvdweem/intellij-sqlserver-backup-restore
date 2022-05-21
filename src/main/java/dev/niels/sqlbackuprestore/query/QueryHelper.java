@@ -2,6 +2,7 @@ package dev.niels.sqlbackuprestore.query;
 
 import com.intellij.database.dialects.mssql.model.MsDatabase;
 import com.intellij.database.psi.DbDataSource;
+import com.intellij.database.psi.DbElement;
 import com.intellij.database.psi.DbNamespaceImpl;
 import com.intellij.database.util.DbImplUtil;
 import com.intellij.openapi.actionSystem.AnActionEvent;
@@ -27,7 +28,7 @@ public abstract class QueryHelper {
 
     private static Optional<DbNamespaceImpl> getNamespace(@NotNull AnActionEvent e) {
         var element = e.getData(CommonDataKeys.PSI_ELEMENT);
-        while (element != null && (!(element instanceof DbNamespaceImpl) || !(((DbNamespaceImpl) element).getDelegate() instanceof MsDatabase))) {
+        while (element != null && (!(element instanceof DbNamespaceImpl) || !(((DbElement) element).getDelegate() instanceof MsDatabase))) {
             element = element.getParent();
         }
         return Optional.ofNullable(element == null ? null : (DbNamespaceImpl) element);
@@ -35,7 +36,7 @@ public abstract class QueryHelper {
 
     private static Optional<DbDataSource> getSource(@NotNull AnActionEvent e) {
         var element = e.getData(CommonDataKeys.PSI_ELEMENT);
-        while (element != null && (!(element instanceof DbDataSource))) {
+        while (element != null && !(element instanceof DbDataSource)) {
             element = element.getParent();
         }
         return Optional.ofNullable(element == null ? null : (DbDataSource) element);

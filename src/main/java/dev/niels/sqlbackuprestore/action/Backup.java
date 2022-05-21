@@ -2,17 +2,19 @@ package dev.niels.sqlbackuprestore.action;
 
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
+import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
-import dev.niels.sqlbackuprestore.query.Auditor;
+import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
+import dev.niels.sqlbackuprestore.ui.FileDialog.DialogType;
+import dev.niels.sqlbackuprestore.ui.FileDialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.NotNull;
@@ -56,14 +58,14 @@ public class Backup extends DumbAwareAction {
      * @param c the connection that should be used for backing up (will be taken over if a backup is being made, close it from the future as well).
      * @return a pair of the connection that should be closed and the file that was being selected. The original connection and null if no file was selected.
      */
-    protected CompletableFuture<FileDialog.RemoteFile> backup(@NotNull AnActionEvent e, Client c) {
+    protected CompletableFuture<RemoteFile> backup(@NotNull AnActionEvent e, Client c) {
         var database = QueryHelper.getDatabase(e);
         if (database.isEmpty()) {
             return CompletableFuture.completedFuture(null);
         }
 
         var name = database.get().getName();
-        var target = FileDialog.chooseFile(name + ".bak", e.getProject(), c, "Backup to file", "Select a file to backup '" + database.get() + "' to", FileDialog.DialogType.SAVE);
+        var target = FileDialog.chooseFile(name + ".bak", e.getProject(), c, "Backup to file", "Select a file to back up '" + database.get() + "' to", DialogType.SAVE);
         if (target == null) {
             return CompletableFuture.completedFuture(null);
         }
@@ -80,8 +82,8 @@ public class Backup extends DumbAwareAction {
                         .thenApply(target::setLength));
 
         c.addWarningConsumer(p -> {
-            if (p.getLeft() == Auditor.MessageType.ERROR) {
-                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", p.getRight(), NotificationType.ERROR));
+            if (p.getLeft() == MessageType.ERROR) {
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", p.getRight(), NotificationType.ERROR));
             }
         });
 

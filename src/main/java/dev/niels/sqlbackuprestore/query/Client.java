@@ -4,10 +4,12 @@ import com.intellij.database.console.client.DatabaseSessionClient;
 import com.intellij.database.console.session.DatabaseSessionManager;
 import com.intellij.database.dataSource.LocalDataSource;
 import com.intellij.database.datagrid.DataConsumer;
-import com.intellij.database.datagrid.DataRequest;
+import com.intellij.database.datagrid.DataConsumer.Column;
+import com.intellij.database.datagrid.DataRequest.Disconnect;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.Disposer;
 import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import lombok.Getter;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -34,12 +36,12 @@ public class Client implements AutoCloseable {
         dbClient.getSession().setTitle(title);
     }
 
-    public Client addWarningConsumer(Consumer<Pair<Auditor.MessageType, String>> consumer) {
+    public Client addWarningConsumer(Consumer<Pair<MessageType, String>> consumer) {
         auditor.addWarningConsumer(consumer);
         return this;
     }
 
-    private CompletableFuture<List<Map<String, Object>>> getResult(String query, Consumer<Pair<List<DataConsumer.Column>, List<DataConsumer.Row>>> consumer) {
+    private CompletableFuture<List<Map<String, Object>>> getResult(String query, Consumer<Pair<List<Column>, List<DataConsumer.Row>>> consumer) {
         var table = new Query(this, dbClient, query, consumer);
         dbClient.getMessageBus().getDataProducer().processRequest(table);
         return table.getFuture();
@@ -66,7 +68,7 @@ public class Client implements AutoCloseable {
         return getSingle(query, column);
     }
 
-    public CompletableFuture<List<Map<String, Object>>> withRows(String query, Consumer<Pair<List<DataConsumer.Column>, List<DataConsumer.Row>>> consumer) {
+    public CompletableFuture<List<Map<String, Object>>> withRows(String query, Consumer<Pair<List<Column>, List<DataConsumer.Row>>> consumer) {
         return getResult(query, consumer);
     }
 
@@ -75,7 +77,7 @@ public class Client implements AutoCloseable {
     }
 
     public void done() {
-        dbClient.getMessageBus().getDataProducer().processRequest(new DataRequest.Disconnect(dbClient));
+        dbClient.getMessageBus().getDataProducer().processRequest(new Disconnect(dbClient));
     }
 
     public Client open() {
@@ -106,7 +108,7 @@ public class Client implements AutoCloseable {
      *
      * @param t The exception that is thrown, will be ignored
      */
-    @SuppressWarnings("unused")
+    @SuppressWarnings({"unused", "SameReturnValue"}) // param t
     public <T> T close(Throwable t) {
         close();
         return null;

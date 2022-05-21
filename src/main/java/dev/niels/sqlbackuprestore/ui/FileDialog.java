@@ -3,7 +3,7 @@ package dev.niels.sqlbackuprestore.ui;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
+import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.fileChooser.ex.FileSaverDialogImpl;
 import com.intellij.openapi.project.Project;
@@ -55,7 +55,7 @@ public class FileDialog {
         var roots = fs.getRoots();
 
         if (roots.length == 0) {
-            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", "The database user for this connection is not allowed to read drives.", NotificationType.ERROR));
+            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", "The database user for this connection is not allowed to read drives.", NotificationType.ERROR));
             return null;
         }
 
@@ -128,7 +128,7 @@ public class FileDialog {
             var fileName = myFileName.getText();
             if (!selected.getPath().endsWith(fileName)) {
                 var parent = selected.isDirectory() ? selected : (RemoteFile) selected.getParent();
-                return (RemoteFile) Optional.ofNullable(selected.getChild(fileName)).orElseGet(() -> new RemoteFile(((DatabaseFileSystem) parent.getFileSystem()), parent, parent.getPath() + "\\" + fileName, false, false));
+                return (RemoteFile) Optional.ofNullable(selected.getChild(fileName)).orElseGet(() -> new RemoteFile((DatabaseFileSystem) parent.getFileSystem(), parent, parent.getPath() + "\\" + fileName, false, false));
             }
             return selected;
         }
@@ -140,10 +140,10 @@ public class FileDialog {
         protected void doOKAction() {
             var file = getSelectedFile();
 
-            if (type == DialogType.SAVE && file != null && file.isExists() && Messages.YES != (Messages.showYesNoDialog(getRootPane(),
+            if (type == DialogType.SAVE && file != null && file.isExists() && Messages.YES != Messages.showYesNoDialog(getRootPane(),
                     UIBundle.message("file.chooser.save.dialog.confirmation", file.getName()),
                     UIBundle.message("file.chooser.save.dialog.confirmation.title"),
-                    Messages.getWarningIcon())) || (type == DialogType.LOAD && (file == null || !file.exists))) {
+                    Messages.getWarningIcon()) || (type == DialogType.LOAD && (file == null || !file.exists))) {
                 return;
             }
 
@@ -162,7 +162,7 @@ public class FileDialog {
         }
 
         public RemoteFile choose(RemoteFile initial, String fileName) {
-            super.save(initial, fileName);
+            save(initial, fileName);
             return chosen;
         }
 
@@ -246,19 +246,19 @@ public class FileDialog {
             // Not needed
         }
 
-        @Override
+        @NotNull @Override
         protected VirtualFile createChildFile(Object requestor, @NotNull VirtualFile vDir, @NotNull String fileName) {
-            return null;
+            throw new IllegalStateException("Creating files is not supported");
         }
 
-        @Override
+        @NotNull @Override
         protected VirtualFile createChildDirectory(Object requestor, @NotNull VirtualFile vDir, @NotNull String dirName) {
-            return null;
+            throw new IllegalStateException("Creating directories is not supported");
         }
 
-        @Override
+        @NotNull @Override
         protected VirtualFile copyFile(Object requestor, @NotNull VirtualFile virtualFile, @NotNull VirtualFile newParent, @NotNull String copyName) {
-            return null;
+            throw new IllegalStateException("Copying files is not supported");
         }
 
         @Override
@@ -281,7 +281,7 @@ public class FileDialog {
         @Getter
         @Setter
         @Accessors(chain = true)
-        private long length = 0;
+        private long length;
 
         public RemoteFile(DatabaseFileSystem databaseFileSystem, RemoteFile parent, String path, boolean directory, boolean exists) {
             this.databaseFileSystem = databaseFileSystem;
@@ -355,9 +355,9 @@ public class FileDialog {
             return null;
         }
 
-        @Override
+        @NotNull @Override
         public OutputStream getOutputStream(Object requestor, long newModificationStamp, long newTimeStamp) {
-            return null;
+            throw new IllegalStateException("Unable to get output stream");
         }
 
         @NotNull
@@ -382,9 +382,9 @@ public class FileDialog {
             }
         }
 
-        @Override
+        @NotNull @Override
         public InputStream getInputStream() {
-            return null;
+            throw new IllegalStateException("Unable to get input stream");
         }
 
         @Override

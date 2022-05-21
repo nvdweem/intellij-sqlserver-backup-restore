@@ -5,7 +5,7 @@ import com.intellij.database.model.DasObject;
 import com.intellij.database.view.DatabaseContextFun;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
+import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
@@ -13,11 +13,12 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
-import dev.niels.sqlbackuprestore.query.Auditor;
+import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.FileDialog;
+import dev.niels.sqlbackuprestore.ui.FileDialog.DialogType;
 import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -48,13 +49,14 @@ import java.util.zip.GZIPInputStream;
 public class Restore extends DumbAwareAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
+        @SuppressWarnings("resource")
         var c = QueryHelper.client(e);
         c.setTitle("Restore database");
 
         CompletableFuture.runAsync(() -> {
                     c.setTitle("Restore database");
                     var target = QueryHelper.getDatabase(e).map(DasObject::getName);
-                    var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target.orElse("new database") + "'", FileDialog.DialogType.LOAD));
+                    var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target.orElse("new database") + "'", DialogType.LOAD));
                     if (file == null) {
                         return;
                     }
@@ -68,7 +70,7 @@ public class Restore extends DumbAwareAction {
                     try {
                         checkDatabaseInUse(e.getProject(), c, database);
                     } catch (Exception ex) {
-                        Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "Unable to determine database usage or close connections: " + ex.getMessage(), NotificationType.ERROR));
+                        Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "Unable to determine database usage or close connections: " + ex.getMessage(), NotificationType.ERROR));
                     }
 
                     c.open();
@@ -80,7 +82,7 @@ public class Restore extends DumbAwareAction {
                                     .thenRun(c::close).exceptionally(c::close)
                                     .get();
                         } catch (Exception ex) {
-                            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, ex.getMessage(), NotificationType.ERROR));
+                            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, ex.getMessage(), NotificationType.ERROR));
                         }
                     }).queue();
                 })
@@ -136,7 +138,7 @@ public class Restore extends DumbAwareAction {
         try {
             return blocker.take().orElse(null);
         } catch (InterruptedException e) {
-            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, e.getMessage(), NotificationType.ERROR));
+            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, e.getMessage(), NotificationType.ERROR));
             Thread.currentThread().interrupt();
             throw new IllegalStateException(e);
         }
@@ -148,7 +150,7 @@ public class Restore extends DumbAwareAction {
         private final Client connection;
         private final String target;
         private String file;
-        private final Consumer<Pair<Auditor.MessageType, String>> progressConsumer;
+        private final Consumer<Pair<MessageType, String>> progressConsumer;
         private final Map<String, Integer> uniqueNames = new HashMap<>();
 
         public RestoreHelper unzipIfNeeded() {
@@ -226,9 +228,9 @@ public class Restore extends DumbAwareAction {
             return connection.getSingle(pathQuery, "path");
         }
 
-        private void progress(Pair<Auditor.MessageType, String> warning) {
-            if (warning.getLeft() == Auditor.MessageType.ERROR) {
-                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, warning.getRight(), NotificationType.ERROR));
+        private void progress(Pair<MessageType, String> warning) {
+            if (warning.getLeft() == MessageType.ERROR) {
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, warning.getRight(), NotificationType.ERROR));
             }
             progressConsumer.accept(warning);
         }

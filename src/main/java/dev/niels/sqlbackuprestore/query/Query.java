@@ -1,6 +1,7 @@
 package dev.niels.sqlbackuprestore.query;
 
 import com.intellij.database.datagrid.DataRequest;
+import com.intellij.database.datagrid.DataRequest.RawQueryRequest;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.tuple.Pair;
@@ -15,7 +16,7 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 @Slf4j
-public class Query extends DataRequest.RawQueryRequest {
+public class Query extends RawQueryRequest {
     private final Consumer<Pair<List<Column>, List<Row>>> consumer;
     private final List<Map<String, Object>> result = new ArrayList<>();
     private List<Column> columns;

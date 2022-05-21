@@ -3,6 +3,7 @@ package dev.niels.sqlbackuprestore.query;
 import com.intellij.database.datagrid.DataAuditor;
 import com.intellij.database.datagrid.DataProducer;
 import com.intellij.database.datagrid.DataRequest;
+import com.intellij.database.datagrid.DataRequest.Context;
 import org.apache.commons.lang3.tuple.Pair;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,57 +31,57 @@ public class Auditor implements DataAuditor {
     }
 
     @Override
-    public void print(@NotNull DataRequest.Context context, @Nullable String s) {
+    public void print(@NotNull Context context, @Nullable String s) {
         produce(MessageType.PRINT, s);
     }
 
     @Override
-    public void warn(@NotNull DataRequest.Context context, @Nullable String s) {
+    public void warn(@NotNull Context context, @Nullable String s) {
         produce(MessageType.WARN, s);
     }
 
     @Override
-    public void error(@NotNull DataRequest.Context context, @Nullable String s, @Nullable Throwable throwable) {
+    public void error(@NotNull Context context, @Nullable String s, @Nullable Throwable throwable) {
         produce(MessageType.ERROR, s);
     }
 
     @Override
-    public void beforeStatement(@NotNull DataRequest.Context context) {
+    public void beforeStatement(@NotNull Context context) {
         // Not needed
     }
 
     @Override
-    public void afterStatement(@NotNull DataRequest.Context context) {
+    public void afterStatement(@NotNull Context context) {
         // Not needed
     }
 
     @Override
-    public void updateCountReceived(@NotNull DataRequest.Context context, int i) {
+    public void updateCountReceived(@NotNull Context context, int i) {
         // Not needed
     }
 
     @Override
-    public void fetchStarted(@NotNull DataRequest.Context context, int i) {
+    public void fetchStarted(@NotNull Context context, int i) {
         // Not needed
     }
 
     @Override
-    public void fetchFinished(@NotNull DataRequest.Context context, int i, int i1) {
+    public void fetchFinished(@NotNull Context context, int i, int i1) {
         // Not needed
     }
 
     @Override
-    public void requestStarted(@NotNull DataRequest.Context context) {
+    public void requestStarted(@NotNull Context context) {
         // Not needed
     }
 
     @Override
-    public void requestFinished(@NotNull DataRequest.Context context) {
+    public void requestFinished(@NotNull Context context) {
         // Not needed
     }
 
     @Override
-    public void txCompleted(@NotNull DataRequest.Context context, @NotNull TxEvent txEvent) {
+    public void txCompleted(@NotNull Context context, @NotNull TxEvent txEvent) {
         // Not needed
     }
 

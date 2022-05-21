@@ -4,7 +4,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
-import dev.niels.sqlbackuprestore.action.Restore;
+import dev.niels.sqlbackuprestore.action.Restore.RestoreTemp;
 import one.util.streamex.StreamEx;
 import org.apache.commons.lang.StringUtils;
 import org.jetbrains.annotations.Nullable;
@@ -13,9 +13,9 @@ import javax.swing.JComponent;
 import javax.swing.table.DefaultTableModel;
 
 public class RestoreFilenamesDialog extends DialogWrapper {
-    private final Restore.RestoreTemp temp;
+    private final RestoreTemp temp;
 
-    public RestoreFilenamesDialog(@Nullable Project project, Restore.RestoreTemp temp) {
+    public RestoreFilenamesDialog(@Nullable Project project, RestoreTemp temp) {
         super(project);
         this.temp = temp;
 
@@ -36,10 +36,10 @@ public class RestoreFilenamesDialog extends DialogWrapper {
             }
         };
         StreamEx.of(temp.getFiles()).map(f -> new String[]{
-                StringUtils.defaultString(asString(f.get("LogicalName"))),
-                StringUtils.defaultString(asString(f.get("Type"))),
-                StringUtils.defaultString(asString(f.get("PhysicalName"))),
-                StringUtils.defaultString(asString(f.get("RestoreAs")))})
+                        StringUtils.defaultString(asString(f.get("LogicalName"))),
+                        StringUtils.defaultString(asString(f.get("Type"))),
+                        StringUtils.defaultString(asString(f.get("PhysicalName"))),
+                        StringUtils.defaultString(asString(f.get("RestoreAs")))})
                 .forEach(model::addRow);
         var table = new JBTable(model);
         table.getColumnModel().getColumn(0).setPreferredWidth(120);

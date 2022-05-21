@@ -4,7 +4,8 @@ import com.intellij.ui.components.JBCheckBox;
 import com.intellij.ui.components.JBLabel;
 import com.intellij.ui.components.JBTextField;
 import com.intellij.util.ui.FormBuilder;
-import com.intellij.util.ui.UIUtil;
+import com.intellij.util.ui.UIUtil.ComponentStyle;
+import com.intellij.util.ui.UIUtil.FontColor;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import lombok.Getter;
 import org.apache.commons.lang.math.NumberUtils;
@@ -22,14 +23,14 @@ public class AppSettingsComponent {
     public AppSettingsComponent() {
         mainPanel = FormBuilder.createFormBuilder()
                 .addComponent(useCompressedBackup)
-                .addComponent(new JBLabel("This is supported for SQL2008+", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addComponent(new JBLabel("This is supported for SQL2008+", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addVerticalGap(1)
                 .addLabeledComponent("Ask for custom compression when downloading file bigger than (MB)", compressionSize)
-                .addComponent(new JBLabel("0 or empty to always ask.", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
-                .addComponent(new JBLabel("Having the database compress the file will be faster but this might make the backup slightly smaller.", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addComponent(new JBLabel("0 or empty to always ask.", ComponentStyle.SMALL, FontColor.BRIGHTER))
+                .addComponent(new JBLabel("Having the database compress the file will be faster but this might make the backup slightly smaller.", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addVerticalGap(1)
                 .addComponent(useDbNameOnDownload)
-                .addComponent(new JBLabel("By default the name of the backup filename will be used", UIUtil.ComponentStyle.SMALL, UIUtil.FontColor.BRIGHTER))
+                .addComponent(new JBLabel("By default, the name of the backup filename will be used", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addVerticalGap(1)
                 .addComponent(askForRestoreFileLocations)
                 .addComponentFillVertically(new JPanel(), 0)

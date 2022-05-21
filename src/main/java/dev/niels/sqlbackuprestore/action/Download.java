@@ -5,13 +5,13 @@ import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications;
+import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooserFactory;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.progress.ProgressIndicator;
-import com.intellij.openapi.progress.Task;
+import com.intellij.openapi.progress.Task.Backgroundable;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
@@ -112,7 +112,7 @@ public class Download extends DumbAwareAction {
     }
 
     @Slf4j
-    private static class DownloadTask extends Task.Backgroundable {
+    private static class DownloadTask extends Backgroundable {
         private static final int CHUNK_SIZE = 1024 * 1024;
         private final Client connection;
         private final String path;
@@ -138,7 +138,7 @@ public class Download extends DumbAwareAction {
                         .thenRun(() -> cleanIfCancelled(indicator))
                         .get();
             } catch (Exception e) {
-                Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
             }
         }
 
@@ -166,7 +166,7 @@ public class Download extends DumbAwareAction {
                             indicator.setFraction(current / parts);
                             indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
                         } catch (Exception e) {
-                            Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + target + ":\n" + e.getMessage(), NotificationType.ERROR));
+                            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + target + ":\n" + e.getMessage(), NotificationType.ERROR));
                             error.set(true);
                         }
                     });
@@ -198,7 +198,7 @@ public class Download extends DumbAwareAction {
                 try {
                     Files.delete(target.toPath());
                 } catch (IOException e) {
-                    Notifications.Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Delete failure", "Unable to delete " + path + " after cancel:\n" + e.getMessage(), NotificationType.WARNING));
+                    Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Delete failure", "Unable to delete " + path + " after cancel:\n" + e.getMessage(), NotificationType.WARNING));
                 }
             }
         }
