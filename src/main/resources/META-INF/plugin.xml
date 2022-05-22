@@ -3,32 +3,6 @@
     <name>SQL Server Backup And Restore</name>
     <vendor email="support@niels.dev" url="https://github.com/nvdweem/intellij-sqlserver-backup-restore">Niels vd Weem</vendor>
 
-    <description><![CDATA[
-    A plugin that allows creating backups and restoring them from the DataGrip context for Microsoft SQLServer databases. <br>
-    <br>
-    The plugin built for my own personal use case which means that it will work for databases that are connected through an SSH tunnel.
-    It supports downloading backups from the remote server to the local machine without using `xp_cmdshell` command.<br>
-    <br>
-    Features:<br>
-    <ul>
-      <li> Creating a backup and storing it on the server </li>
-      <li> Creating a backup, storing it and download it right after </li>
-      <li> Reading a backup into an existing database </li>
-      <li> Reading a backup into a newly created database </li>
-    </ul><br>
-    <br>
-    <b> Note: </b> AWS and probably also Azure don't seem to support file based backing up and aren't supported by this plugin.
-    ]]></description>
-
-    <change-notes><![CDATA[
-        1.0.1<br/>
-        - Added support for IntelliJ 2022.2<br/>
-        <br/>
-        1.0<br/>
-        - Plugin can be used while IntelliJ is indexing<br/>
-        - Downloading the backup doesn't trigger the unsafe query error anymore
-    ]]></change-notes>
-
     <depends>com.intellij.modules.platform</depends>
     <depends>com.intellij.database</depends>
 
