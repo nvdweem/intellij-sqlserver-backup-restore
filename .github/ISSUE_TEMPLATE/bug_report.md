@@ -6,10 +6,6 @@ labels: ''
 assignees: ''
 ---
 
-<!-- Please do not use this issue tracker for support or questions, use Forum or Slack listed here:
-     https://plugins.jetbrains.com/docs/intellij/getting-help.html
-     Please **always** provide link to sources if possible. -->
-
 **Describe the bug:**
 <!-- A clear and concise description of what the bug is. -->
 
@@ -20,4 +16,4 @@ assignees: ''
 <!-- A clear and concise description of what you expected to happen. -->
 
 **Additional context:**
-<!-- Add any other context about the problem here. -->
+<!-- Add context for the issue, like SQLServer version and deployment method (Windows/Docker/etc) -->
