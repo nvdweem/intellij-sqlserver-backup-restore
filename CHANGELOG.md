@@ -1,6 +1,6 @@
 # SQLServer Backup and Restore Changelog
 
-## [1.0.2]
+## [Unreleased]
 - Started using the IntelliJ Plugin Template
 - Plugin is now signed
 
