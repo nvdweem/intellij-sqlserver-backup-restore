@@ -360,9 +360,8 @@ public class FileDialog {
             throw new IllegalStateException("Unable to get output stream");
         }
 
-        @NotNull
         @Override
-        public byte[] contentsToByteArray() {
+        public byte @NotNull [] contentsToByteArray() {
             return new byte[0];
         }
 

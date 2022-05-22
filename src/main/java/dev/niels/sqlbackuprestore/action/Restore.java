@@ -1,8 +1,7 @@
 package dev.niels.sqlbackuprestore.action;
 
-import com.intellij.database.actions.RefreshActionsLogic;
+import com.intellij.database.actions.RefreshModelAction;
 import com.intellij.database.model.DasObject;
-import com.intellij.database.view.DatabaseContextFun;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
@@ -77,7 +76,7 @@ public class Restore extends DumbAwareAction {
                         try {
                             new RestoreHelper(c, database, file.getPath(), consumer).unzipIfNeeded()
                                     .restore()
-                                    .thenRun(() -> RefreshActionsLogic.refresh(e.getProject(), DatabaseContextFun.getSelectedDbElementsWithParentsForGroups(e.getDataContext())))
+                                    .thenRun(() -> new RefreshModelAction().actionPerformed(e))
                                     .thenRun(c::close).exceptionally(c::close)
                                     .get();
                         } catch (Exception ex) {
