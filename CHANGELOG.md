@@ -1,6 +1,7 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+- Fix ArrayIndexOutOfBoundsException for Linux/macOS when restoring
 
 ## [1.0.2]
 - Started using the IntelliJ Plugin Template

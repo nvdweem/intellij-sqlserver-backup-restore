@@ -81,16 +81,17 @@ public class FileDialog {
     @Nullable
     private RemoteFile getRemoteFile(VirtualFile[] roots, String path) {
         var parts = StringUtils.defaultIfBlank(path, "").split("[\\\\/]");
+        var finalParts = parts.length > 0 ? parts : new String[]{"/"};
 
         for (VirtualFile root : roots) {
-            if (!root.getName().equals(parts[0])) {
+            if (!root.getName().equals(finalParts[0])) {
                 continue;
             }
 
             var current = Optional.of(root);
-            for (int i = 1; i < parts.length && current.isPresent(); i++) {
+            for (var i = 1; i < finalParts.length && current.isPresent(); i++) {
                 var ic = i;
-                current = current.map(c -> c.findChild(parts[ic]));
+                current = current.map(c -> c.findChild(finalParts[ic]));
             }
 
             if (current.isPresent()) {
