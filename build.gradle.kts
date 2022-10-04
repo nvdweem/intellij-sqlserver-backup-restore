@@ -43,7 +43,6 @@ tasks {
     }
 
     buildSearchableOptions {
-        jbrVersion.set("11_0_14_1b2043.45")
     }
 
     wrapper {
