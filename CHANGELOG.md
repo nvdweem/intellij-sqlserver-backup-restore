@@ -1,6 +1,8 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+
+## [1.0.3]
 - Fix ArrayIndexOutOfBoundsException for Linux/macOS when restoring
 
 ## [1.0.2]
@@ -14,6 +16,7 @@
 ## [1.0.0]
 ### Added
 - Plugin can be used while IntelliJ is indexing
+
 
 ### Fixed
 - Downloading the backup doesn't trigger the unsafe query error anymore
@@ -29,6 +32,7 @@
 - Added setting to do compressed backups. The previous compression options are still available but shouldn't add much anymore
 - Allow changing filenames when restoring a backup
 
+
 ### Fixed
 - Listing files and drives is done similarly to what SSMS seems to do which means you shouldn't need sysadmin rights anymore
 - Added some fixes to make backing up and restoring work for SQLServer running in a docker container
@@ -37,6 +41,7 @@
 ### Changed
 - The suggested name for downloading a backup is the name the backup was given when backing up (Pull request from felhag)
 - Asking for compression and using database name as default filename is configurable
+
 
 ### Fixed
 - When cancelling a backup & download the connection with the database will be closed
@@ -77,6 +82,7 @@
 ### Added
 - Downloading using jtds or ms driver
 - Refresh database after restore action
+
 
 ### Fixed
 - No infinite wait anymore when reading data
