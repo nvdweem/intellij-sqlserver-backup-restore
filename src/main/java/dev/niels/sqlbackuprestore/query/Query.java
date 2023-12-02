@@ -49,7 +49,7 @@ public class Query extends RawQueryRequest {
         if (consumer != null) {
             consumer.accept(columns, StreamEx.of(list).select(GridRow.class).toImmutableList());
         }
-        result.addAll(list.stream().map(r -> columns.stream().collect(HashMap<String, Object>::new, (m, v) -> m.put(v.getName(), v.getValue(r)), HashMap::putAll)).collect(Collectors.toList()));
+        result.addAll(list.stream().map(r -> columns.stream().collect(HashMap<String, Object>::new, (m, v) -> m.put(v.getName(), v.getValue(r)), HashMap::putAll)).toList());
     }
 
     @Override public void afterLastRowAdded(@NotNull GridDataRequest.Context context, int total) {
