@@ -6,7 +6,7 @@ import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
 import dev.niels.sqlbackuprestore.action.Restore.RestoreTemp;
 import one.util.streamex.StreamEx;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComponent;

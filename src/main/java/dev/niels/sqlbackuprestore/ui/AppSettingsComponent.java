@@ -8,7 +8,7 @@ import com.intellij.util.ui.UIUtil.ComponentStyle;
 import com.intellij.util.ui.UIUtil.FontColor;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import lombok.Getter;
-import org.apache.commons.lang.math.NumberUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 
 import javax.swing.JPanel;
 

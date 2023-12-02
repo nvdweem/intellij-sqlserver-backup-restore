@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+## [1.0.4]
+- Fix usage of deprecated API
+
 ## [1.0.3]
 - Fix ArrayIndexOutOfBoundsException for Linux/macOS when restoring
 

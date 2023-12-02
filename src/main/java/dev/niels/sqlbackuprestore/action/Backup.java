@@ -16,7 +16,7 @@ import dev.niels.sqlbackuprestore.ui.FileDialog;
 import dev.niels.sqlbackuprestore.ui.FileDialog.DialogType;
 import dev.niels.sqlbackuprestore.ui.FileDialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Set;

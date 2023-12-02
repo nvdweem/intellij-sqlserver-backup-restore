@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
 
 @Slf4j
 public class Query extends RawQueryRequest {
@@ -27,7 +26,7 @@ public class Query extends RawQueryRequest {
     private final CompletableFuture<List<Map<String, Object>>> future = new CompletableFuture<>();
 
     protected Query(Client c, Owner owner, String query, BiConsumer<List<GridColumn>, List<GridRow>> consumer) {
-        super(owner, query, DataRequest.newConstraints(0, 5000, 0, 0));
+        super(owner, query, DataRequest.newConstraints(0, 5000, 0, 0, 0));
         this.consumer = consumer;
 
         c.open();
