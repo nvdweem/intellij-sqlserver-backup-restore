@@ -19,6 +19,7 @@ public class AppSettingsComponent {
     private final JBCheckBox useCompressedBackup = new JBCheckBox("Use compressed backups");
     private final JBCheckBox useDbNameOnDownload = new JBCheckBox("Use DB name on backup and download");
     private final JBCheckBox askForRestoreFileLocations = new JBCheckBox("Ask for file locations when restoring");
+    private final JBCheckBox enableDownloadOption = new JBCheckBox("Enable 'Backup and Download' option");
 
     public AppSettingsComponent() {
         mainPanel = FormBuilder.createFormBuilder()
@@ -33,6 +34,9 @@ public class AppSettingsComponent {
                 .addComponent(new JBLabel("By default, the name of the backup filename will be used", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addVerticalGap(1)
                 .addComponent(askForRestoreFileLocations)
+                .addVerticalGap(1)
+                .addComponent(enableDownloadOption)
+                .addComponent(new JBLabel("Can be used to download a backup from a remote database, not very useful for local database servers", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
     }
@@ -43,6 +47,7 @@ public class AppSettingsComponent {
         modified |= useCompressedBackup.isSelected() != current.isUseCompressedBackup();
         modified |= useDbNameOnDownload.isSelected() != current.isUseDbNameOnDownload();
         modified |= askForRestoreFileLocations.isSelected() != current.isAskForRestoreFileLocations();
+        modified |= enableDownloadOption.isSelected() != current.isEnableDownloadOption();
         return modified;
     }
 
@@ -60,6 +65,7 @@ public class AppSettingsComponent {
         current.setUseCompressedBackup(useCompressedBackup.isSelected());
         current.setUseDbNameOnDownload(useDbNameOnDownload.isSelected());
         current.setAskForRestoreFileLocations(askForRestoreFileLocations.isSelected());
+        current.setEnableDownloadOption(enableDownloadOption.isSelected());
     }
 
     public void reset() {
@@ -68,5 +74,6 @@ public class AppSettingsComponent {
         useCompressedBackup.setSelected(current.isUseCompressedBackup());
         useDbNameOnDownload.setSelected(current.isUseDbNameOnDownload());
         askForRestoreFileLocations.setSelected(current.isAskForRestoreFileLocations());
+        enableDownloadOption.setSelected(current.isEnableDownloadOption());
     }
 }

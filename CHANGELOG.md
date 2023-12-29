@@ -5,6 +5,8 @@
 ## [1.0.4]
 - Fix usage of deprecated API
 - Increase since-version
+- `Backup & Download` feature is now optional
+- File dialogs now show that the files might not be local
 
 ## [1.0.3]
 - Fix ArrayIndexOutOfBoundsException for Linux/macOS when restoring

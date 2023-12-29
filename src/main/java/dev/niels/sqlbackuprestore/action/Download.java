@@ -94,7 +94,11 @@ public class Download extends DumbAwareAction {
 
     @Override
     public void update(@NotNull AnActionEvent e) {
-        e.getPresentation().setEnabled(QueryHelper.getDatabase(e).isPresent());
+        var isVisible = AppSettingsState.getInstance().isEnableDownloadOption();
+        e.getPresentation().setVisible(isVisible);
+        if (isVisible) {
+            e.getPresentation().setEnabled(QueryHelper.getDatabase(e).isPresent());
+        }
     }
 
     private boolean askCompress(Project project, Long size) {
