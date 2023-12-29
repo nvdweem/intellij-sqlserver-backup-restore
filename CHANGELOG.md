@@ -1,8 +1,6 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
-
-## [1.0.4]
 - Fix usage of deprecated API
 - Increase since-version
 - `Backup & Download` feature is now optional
