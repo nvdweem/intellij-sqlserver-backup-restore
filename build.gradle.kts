@@ -4,8 +4,8 @@ fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij") version "1.9.0"
-    id("io.freefair.lombok") version "6.5.1"
+    id("org.jetbrains.intellij") version "1.16.1"
+    id("io.freefair.lombok") version "8.4"
     id("org.jetbrains.changelog") version "1.3.1"
 }
 
@@ -88,6 +88,6 @@ tasks {
     publishPlugin {
         dependsOn("patchChangelog")
         token.set(System.getenv("INTELLIJ_TOKEN"))
-        channels.set(listOf(properties("pluginVersion").split('-').getOrElse(1) { "default" }.split('.').first()))
+        channels.set(listOf("default"))
     }
 }
