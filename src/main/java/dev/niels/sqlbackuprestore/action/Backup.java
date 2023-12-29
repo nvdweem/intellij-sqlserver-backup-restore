@@ -65,7 +65,7 @@ public class Backup extends DumbAwareAction {
         }
 
         var name = database.get().getName();
-        var target = FileDialog.chooseFile(name + ".bak", e.getProject(), c, "Backup to file", "Select a file to back up '" + database.get() + "' to", DialogType.SAVE);
+        var target = FileDialog.chooseFile(name + ".bak", e.getProject(), c, "Backup "+database.get()+" to file", DialogType.SAVE);
         if (target == null) {
             return CompletableFuture.completedFuture(null);
         }

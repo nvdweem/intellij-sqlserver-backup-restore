@@ -33,10 +33,10 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class FileDialog {
     public static final String KEY_PREFIX = "sqlserver_backup_path_";
+    private static final String DESCRIPTION = "This file picker shows files from the SQLServer instance, this might not be your local filesystem.";
     private final Project project;
     private final Client connection;
     private final String title;
-    private final String description;
     private final DialogType type;
 
     public enum DialogType {
@@ -46,8 +46,8 @@ public class FileDialog {
     /**
      * Open the file dialog to show files from the connection.
      */
-    public static RemoteFile chooseFile(String fileName, Project project, Client c, String title, String description, DialogType type) {
-        return new FileDialog(project, c, title, description, type).choose(fileName);
+    public static RemoteFile chooseFile(String fileName, Project project, Client c, String title, DialogType type) {
+        return new FileDialog(project, c, title, type).choose(fileName);
     }
 
     private RemoteFile choose(String fileName) {
@@ -60,7 +60,7 @@ public class FileDialog {
         }
 
         var initial = getInitial(roots);
-        return new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, description).withRoots(roots).withDescription(description), project).choose(initial, fileName);
+        return new Chooser((FileSaverDescriptor) new FileSaverDescriptor(title, DESCRIPTION).withRoots(roots), project).choose(initial, fileName);
     }
 
     private RemoteFile getInitial(VirtualFile[] roots) {

@@ -54,7 +54,7 @@ public class Restore extends DumbAwareAction {
         CompletableFuture.runAsync(() -> {
                     c.setTitle("Restore database");
                     var target = QueryHelper.getDatabase(e).map(DasObject::getName);
-                    var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore database", "Select a file to restore to '" + target.orElse("new database") + "'", DialogType.LOAD));
+                    var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore " + target.orElse("new database"), DialogType.LOAD));
                     if (file == null) {
                         return;
                     }
