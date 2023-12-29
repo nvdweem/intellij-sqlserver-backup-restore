@@ -1,10 +1,10 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
-- Fix usage of deprecated API
-- Increase since-version
 - `Backup & Download` feature is now optional
 - File dialogs now show that the files might not be local
+- Fix usage of deprecated API
+- Increase since-version
 
 ## [1.0.3]
 - Fix ArrayIndexOutOfBoundsException for Linux/macOS when restoring
