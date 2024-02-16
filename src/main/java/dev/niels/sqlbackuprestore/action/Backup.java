@@ -3,6 +3,7 @@ package dev.niels.sqlbackuprestore.action;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
@@ -34,6 +35,11 @@ public class Backup extends DumbAwareAction {
             "-133711905", // Express with Advanced Services
             "1293598313" // Web
     );
+
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.BGT;
+    }
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {

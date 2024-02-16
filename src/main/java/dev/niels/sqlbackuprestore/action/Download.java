@@ -6,6 +6,7 @@ import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooserFactory;
@@ -39,6 +40,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Triggers backup and then allows downloading the result
  */
 public class Download extends DumbAwareAction {
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.BGT;
+    }
+
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         try (var c = QueryHelper.client(e)) {

@@ -1,6 +1,7 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+- Idea 2024.1 compatible ([pending issue](https://youtrack.jetbrains.com/issue/DBE-20026/The-Unsafe-query-Update-statement-without-where-updates-all-table-rows-at-once-message-triggers-incorrectly))
 
 ## [1.0.4]
 - `Backup & Download` feature is now optional

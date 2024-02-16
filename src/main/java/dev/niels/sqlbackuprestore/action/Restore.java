@@ -5,6 +5,7 @@ import com.intellij.database.model.DasObject;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
+import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
@@ -45,6 +46,11 @@ import java.util.zip.GZIPInputStream;
  */
 @Slf4j
 public class Restore extends DumbAwareAction {
+    @Override
+    public @NotNull ActionUpdateThread getActionUpdateThread() {
+        return ActionUpdateThread.BGT;
+    }
+
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         @SuppressWarnings("resource")
@@ -89,21 +95,22 @@ public class Restore extends DumbAwareAction {
     }
 
     private void checkDatabaseInUse(Project project, Client c, String target) throws ExecutionException, InterruptedException {
-        c.withRows(String.format("SELECT\n" +
-                        "    [Session ID]    = s.session_id,\n" +
-                        "    [User Process]  = CONVERT(CHAR(1), s.is_user_process),\n" +
-                        "    [Login]         = s.login_name,\n" +
-                        "    [Application]   = ISNULL(s.program_name, N''),\n" +
-                        "    [Open Transactions] = ISNULL(r.open_transaction_count,0),\n" +
-                        "    [Last Request Start Time] = s.last_request_start_time,\n" +
-                        "    [Host Name]     = ISNULL(s.host_name, N''),\n" +
-                        "    [Net Address]   = ISNULL(c.client_net_address, N'')\n" +
-                        "FROM sys.dm_exec_sessions s\n" +
-                        "LEFT OUTER JOIN sys.dm_exec_connections c ON (s.session_id = c.session_id)\n" +
-                        "LEFT OUTER JOIN sys.dm_exec_requests r ON (s.session_id = r.session_id)\n" +
-                        "LEFT OUTER JOIN sys.sysprocesses p ON (s.session_id = p.spid)\n" +
-                        "where db_name(p.dbid) = '%s'\n" +
-                        "ORDER BY s.session_id;", target), (cs, rs) -> {
+        c.withRows(String.format("""
+                        SELECT
+                            [Session ID]    = s.session_id,
+                            [User Process]  = CONVERT(CHAR(1), s.is_user_process),
+                            [Login]         = s.login_name,
+                            [Application]   = ISNULL(s.program_name, N''),
+                            [Open Transactions] = ISNULL(r.open_transaction_count,0),
+                            [Last Request Start Time] = s.last_request_start_time,
+                            [Host Name]     = ISNULL(s.host_name, N''),
+                            [Net Address]   = ISNULL(c.client_net_address, N'')
+                        FROM sys.dm_exec_sessions s
+                        LEFT OUTER JOIN sys.dm_exec_connections c ON (s.session_id = c.session_id)
+                        LEFT OUTER JOIN sys.dm_exec_requests r ON (s.session_id = r.session_id)
+                        LEFT OUTER JOIN sys.sysprocesses p ON (s.session_id = p.spid)
+                        where db_name(p.dbid) = '%s'
+                        ORDER BY s.session_id;""", target), (cs, rs) -> {
                 })
                 .thenCompose(rows -> {
                     if (!rows.isEmpty() && Messages.YES == invokeAndWait(() -> Messages.showYesNoDialog(project,
