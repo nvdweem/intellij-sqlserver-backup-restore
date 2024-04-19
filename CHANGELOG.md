@@ -1,6 +1,8 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+
+## [1.0.5]
 - Idea 2024.1 compatible
 
 ## [1.0.4]
