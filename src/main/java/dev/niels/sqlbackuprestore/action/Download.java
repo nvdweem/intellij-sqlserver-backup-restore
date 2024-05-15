@@ -21,7 +21,7 @@ import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
-import dev.niels.sqlbackuprestore.ui.FileDialog;
+import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
