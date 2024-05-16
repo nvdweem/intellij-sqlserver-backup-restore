@@ -43,8 +43,7 @@ class Chooser extends FileSaverDialogImpl {
 
         var fileName = myFileName.getText();
         if (!selected.getPath().endsWith(fileName)) {
-            var parent = selected.isDirectory() ? selected : (RemoteFile) selected.getParent();
-            return (RemoteFile) Optional.ofNullable(selected.getChild(fileName)).orElseGet(() -> new RemoteFile((DatabaseFileSystem) parent.getFileSystem(), parent, parent.getPath() + "\\" + fileName, false, false));
+            return (RemoteFile) selected.getChild(fileName, true);
         }
         return selected;
     }

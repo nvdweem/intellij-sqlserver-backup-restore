@@ -9,6 +9,8 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 import org.apache.commons.lang3.StringUtils;
+import org.jetbrains.annotations.Contract;
+import org.jetbrains.annotations.NonNls;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -94,11 +96,16 @@ public class RemoteFile extends VirtualFile {
         return children;
     }
 
-    public VirtualFile getChild(String name) {
+    @Contract("_, true -> !null")
+    public VirtualFile getChild(String name, boolean nonExistingIfNotFound) {
         for (VirtualFile child : getChildren()) {
             if (name.equals(child.getName())) {
                 return child;
             }
+        }
+
+        if (nonExistingIfNotFound) {
+            return new RemoteFile((DatabaseFileSystem) getFileSystem(), this, getPath() + "\\" + name, false, false);
         }
         return null;
     }

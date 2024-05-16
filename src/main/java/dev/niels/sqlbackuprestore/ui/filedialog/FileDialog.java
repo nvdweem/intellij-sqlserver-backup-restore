@@ -6,6 +6,8 @@ import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.fileChooser.FileChooser;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
+import com.intellij.openapi.fileChooser.FileChooserDialog;
+import com.intellij.openapi.fileChooser.FileChooserFactory;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -71,7 +73,14 @@ public class FileDialog {
         descriptor.setDescription(DESCRIPTION);
         descriptor.setForcedToUseIdeaFileChooser(true);
 
-        return StreamEx.of(FileChooser.chooseFiles(descriptor, project, initial)).select(RemoteFile.class).toArray(RemoteFile[]::new);
+        var chooser = FileChooserFactory.getInstance().createFileChooser(descriptor, project, null);
+        var choice = chooser.choose(project, initial, initial);
+
+        var result = StreamEx.of(choice).select(RemoteFile.class).toArray(RemoteFile[]::new);
+        if (result.length > 0) {
+            PropertiesComponent.getInstance(project).setValue(getSelectionKeyName(result[0].getConnection()), result[0].getPath());
+        }
+        return result;
     }
 
     private @NotNull RemoteFile @NotNull [] saveFile(String fileName, VirtualFile[] roots, RemoteFile initial) {
@@ -87,8 +96,11 @@ public class FileDialog {
     private RemoteFile getInitial(VirtualFile[] roots) {
         var path = PropertiesComponent.getInstance(project).getValue(getSelectionKeyName(connection));
         RemoteFile current = getRemoteFile(roots, path);
-        if (current != null) {
+        if (current != null && current.exists()) {
             return current;
+        }
+        if (current != null && current.getParent() != null && current.getParent().exists()) {
+            return (RemoteFile) current.getParent();
         }
 
         try {
@@ -112,7 +124,7 @@ public class FileDialog {
             var current = Optional.of(root);
             for (var i = 1; i < finalParts.length && current.isPresent(); i++) {
                 var ic = i;
-                current = current.map(c -> c.findChild(finalParts[ic]));
+                current = current.map(c -> c instanceof RemoteFile rf ? rf.getChild(finalParts[ic], true) : c.findChild(finalParts[ic]));
             }
 
             if (current.isPresent()) {
