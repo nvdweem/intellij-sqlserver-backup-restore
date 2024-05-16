@@ -76,7 +76,7 @@ tasks {
     }
 
     runIde {
-        jvmArgs = listOf("-Xmx1500M")
+        jvmArgs = listOf("-Xmx1500M", "-XX:+AllowEnhancedClassRedefinition")
     }
 
     signPlugin {
