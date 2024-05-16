@@ -10,8 +10,6 @@ import com.intellij.ui.UIBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Optional;
-
 import static dev.niels.sqlbackuprestore.ui.filedialog.FileDialog.getSelectionKeyName;
 
 /**

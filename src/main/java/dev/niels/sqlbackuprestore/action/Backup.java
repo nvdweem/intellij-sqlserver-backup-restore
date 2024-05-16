@@ -13,7 +13,6 @@ import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
-import dev.niels.sqlbackuprestore.ui.filedialog.DialogType;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
@@ -71,7 +70,7 @@ public class Backup extends DumbAwareAction {
         }
 
         var name = database.get().getName();
-        var target = FileDialog.saveFile(name + ".bak", e.getProject(), c, "Backup "+database.get()+" to file");
+        var target = FileDialog.saveFile(name + ".bak", e.getProject(), c, "Backup " + database.get() + " to file");
         if (target == null) {
             return CompletableFuture.completedFuture(null);
         }

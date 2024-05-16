@@ -210,27 +210,25 @@ public class Restore extends DumbAwareAction {
 
         @Data
         @AllArgsConstructor
-        private class ObjectHolder<T> {
+        private static class ObjectHolder<T> {
             private T value;
         }
 
         public CompletableFuture<Object> restore() {
             var temp = new RestoreTemp();
             var result = new ObjectHolder<>(CompletableFuture.completedFuture(null));
-            action.getFiles().forEach(file -> {
-                result.setValue(
-                        result.getValue().thenCompose(x -> connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file.getFile().getPath() + "';"))
-                                .thenApply(temp::setFiles)
-                                .thenCompose(x -> determineTargetPath())
-                                .thenApply(temp::setLocation)
-                                .thenAccept(this::defaultFileNames)
-                                .thenApply(v -> determineRestoreQuery(action, file, temp))
+            action.getFiles().forEach(file -> result.setValue(
+                    result.getValue().thenCompose(x -> connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file.getFile().getPath() + "';"))
+                            .thenApply(temp::setFiles)
+                            .thenCompose(x -> determineTargetPath())
+                            .thenApply(temp::setLocation)
+                            .thenAccept(this::defaultFileNames)
+                            .thenApply(v -> determineRestoreQuery(action, file, temp))
 
-                                .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
-                                .thenApply(x -> null)
-                                .exceptionally(e -> null)
-                );
-            });
+                            .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
+                            .thenApply(x -> null)
+                            .exceptionally(e -> null)
+            ));
             return result.getValue();
         }
 
