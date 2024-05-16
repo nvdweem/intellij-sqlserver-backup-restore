@@ -1,6 +1,8 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+
+## [1.0.6]
 - Add support for differential backups (pick both files when restoring)
 
 ## [1.0.5]
