@@ -4,6 +4,8 @@ import com.intellij.ide.util.PropertiesComponent;
 import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
+import com.intellij.openapi.fileChooser.FileChooser;
+import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -11,11 +13,16 @@ import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.ui.SQLHelper;
 import lombok.RequiredArgsConstructor;
+import one.util.streamex.StreamEx;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
+
+import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.LOAD;
+import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.SAVE;
 
 /**
  * File dialog to show remote files from SQLServer.
@@ -31,11 +38,15 @@ public class FileDialog {
     /**
      * Open the file dialog to show files from the connection.
      */
-    public static RemoteFile chooseFile(String fileName, Project project, Client c, String title, DialogType type) {
-        return new FileDialog(project, c, title).choose(type, fileName);
+    public static RemoteFile[] chooseFiles(String fileName, Project project, Client c, String title) {
+        return new FileDialog(project, c, title).choose(LOAD, fileName);
     }
 
-    private RemoteFile choose(DialogType type, String fileName) {
+    public static RemoteFile saveFile(String fileName, Project project, Client c, String title) {
+        return ArrayUtils.get(new FileDialog(project, c, title).choose(SAVE, fileName), 0);
+    }
+
+    private RemoteFile[] choose(DialogType type, String fileName) {
         var fs = new DatabaseFileSystem(connection);
         var roots = fs.getRoots();
 
@@ -45,7 +56,32 @@ public class FileDialog {
         }
 
         var initial = getInitial(roots);
-        return new Chooser(type, (FileSaverDescriptor) new FileSaverDescriptor(title, DESCRIPTION).withRoots(roots), project).choose(initial, fileName);
+
+        if (type == LOAD) {
+            return loadFile(roots, initial);
+        } else {
+            return saveFile(fileName, roots, initial);
+        }
+    }
+
+    private @NotNull RemoteFile @NotNull [] loadFile(VirtualFile[] roots, RemoteFile initial) {
+        var descriptor = new FileChooserDescriptor(true, false, false, false, false, true)
+                .withRoots(roots);
+        descriptor.setTitle(title);
+        descriptor.setDescription(DESCRIPTION);
+        descriptor.setForcedToUseIdeaFileChooser(true);
+
+        return StreamEx.of(FileChooser.chooseFiles(descriptor, project, initial)).select(RemoteFile.class).toArray(RemoteFile[]::new);
+    }
+
+    private @NotNull RemoteFile @NotNull [] saveFile(String fileName, VirtualFile[] roots, RemoteFile initial) {
+        var descriptor = (FileSaverDescriptor) new FileSaverDescriptor(title, DESCRIPTION).withRoots(roots);
+        descriptor.setForcedToUseIdeaFileChooser(true);
+        var file = new Chooser(descriptor, project).choose(initial, fileName);
+        if (file != null) {
+            return new RemoteFile[]{file};
+        }
+        return new RemoteFile[0];
     }
 
     private RemoteFile getInitial(VirtualFile[] roots) {

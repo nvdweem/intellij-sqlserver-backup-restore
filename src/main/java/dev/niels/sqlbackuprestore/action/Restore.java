@@ -17,14 +17,20 @@ import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
-import dev.niels.sqlbackuprestore.ui.FileDialog;
-import dev.niels.sqlbackuprestore.ui.FileDialog.DialogType;
+import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta;
+import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta.BackupType;
 import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
+import dev.niels.sqlbackuprestore.ui.RestoreFullPartialDialog;
+import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
+import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
+import one.util.streamex.StreamEx;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -60,13 +66,18 @@ public class Restore extends DumbAwareAction {
         CompletableFuture.runAsync(() -> {
                     c.setTitle("Restore database");
                     var target = QueryHelper.getDatabase(e).map(DasObject::getName);
-                    var file = invokeAndWait(() -> FileDialog.chooseFile(null, e.getProject(), c, "Restore " + target.orElse("new database"), DialogType.LOAD));
-                    if (file == null) {
+                    var files = invokeAndWait(() -> FileDialog.chooseFiles(null, e.getProject(), c, "Restore " + target.orElse("new database")));
+                    if (ArrayUtils.isEmpty(files)) {
                         return;
                     }
 
-                    var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(StringUtils.removeEnd(StringUtils.removeEnd(file.getName(), ".gzip"), ".bak"))));
+                    var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(StringUtils.removeEnd(StringUtils.removeEnd(files[0].getName(), ".gzip"), ".bak"))));
                     if (StringUtils.isBlank(database)) {
+                        return;
+                    }
+
+                    var toRestore = determineToRestore(e.getProject(), files, c);
+                    if (toRestore == null) {
                         return;
                     }
 
@@ -80,7 +91,7 @@ public class Restore extends DumbAwareAction {
                     c.open();
                     new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
                         try {
-                            new RestoreHelper(c, database, file.getPath(), consumer).unzipIfNeeded()
+                            new RestoreHelper(c, database, toRestore, consumer).unzipIfNeeded()
                                     .restore()
                                     .thenRun(() -> new RefreshModelAction().actionPerformed(e))
                                     .thenRun(c::close).exceptionally(c::close)
@@ -92,6 +103,25 @@ public class Restore extends DumbAwareAction {
                 })
                 .thenRun(c::close)
                 .exceptionally(c::close);
+    }
+
+    private @Nullable RestoreAction determineToRestore(@Nullable Project project, RemoteFile[] files, Client c) {
+        var withMeta = StreamEx.of(files)
+                .map(RemoteFileWithMeta.factory(c))
+                .toList();
+        var fullsWithPartials = StreamEx.of(withMeta)
+                .filter(RemoteFileWithMeta::isFull)
+                .mapToEntry(full -> StreamEx.of(withMeta).filter(m -> m.isPartialOf(full)).toList())
+                .toMap();
+
+        if (fullsWithPartials.isEmpty()) {
+            return null;
+        }
+        if (fullsWithPartials.size() == 1 && fullsWithPartials.values().iterator().next().isEmpty()) {
+            return new RestoreAction(fullsWithPartials.keySet().iterator().next(), null);
+        }
+
+        return RestoreFullPartialDialog.choose(project, fullsWithPartials);
     }
 
     private void checkDatabaseInUse(Project project, Client c, String target) throws ExecutionException, InterruptedException {
@@ -154,45 +184,68 @@ public class Restore extends DumbAwareAction {
     private static class RestoreHelper {
         private final Client connection;
         private final String target;
-        private String file;
+        private RestoreAction action;
         private final BiConsumer<MessageType, String> progressConsumer;
         private final Map<String, Integer> uniqueNames = new HashMap<>();
 
         public RestoreHelper unzipIfNeeded() {
-            if (file.toLowerCase().endsWith(".gzip")) {
-                var unzipped = StringUtils.appendIfMissing(StringUtils.removeEndIgnoreCase(file, ".gzip"), ".bak");
-                try (var fis = new FileInputStream(file); var gzis = new GZIPInputStream(fis); var fos = new FileOutputStream(unzipped)) {
-                    byte[] buffer = new byte[1024];
-                    int length;
-                    while ((length = gzis.read(buffer)) > 0) {
-                        fos.write(buffer, 0, length);
+            var files = action.getFiles().map(RemoteFileWithMeta::getFile).map(RemoteFile::getPath).toList();
+            for (var file : files) {
+                if (file.toLowerCase().endsWith(".gzip")) {
+                    var unzipped = StringUtils.appendIfMissing(StringUtils.removeEndIgnoreCase(file, ".gzip"), ".bak");
+                    try (var fis = new FileInputStream(file); var gzis = new GZIPInputStream(fis); var fos = new FileOutputStream(unzipped)) {
+                        byte[] buffer = new byte[1024];
+                        int length;
+                        while ((length = gzis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, length);
+                        }
+                        file = unzipped;
+                    } catch (IOException e) {
+                        log.warn("failed to unzip {}", file);
                     }
-                    file = unzipped;
-                } catch (IOException e) {
-                    log.warn("failed to unzip {}", file);
                 }
             }
             return this;
         }
 
+        @Data
+        @AllArgsConstructor
+        private class ObjectHolder<T> {
+            private T value;
+        }
+
         public CompletableFuture<Object> restore() {
             var temp = new RestoreTemp();
-            return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file + "';")
-                    .thenApply(temp::setFiles)
-                    .thenCompose(x -> determineTargetPath())
-                    .thenApply(temp::setLocation)
-                    .thenAccept(this::defaultFileNames)
-                    .thenRun(() -> {
-                        if (AppSettingsState.getInstance().isAskForRestoreFileLocations()) {
-                            askForFileLocations(temp);
-                        }
-                    })
-                    .thenApply(v -> temp.files.stream().map(s -> String.format("MOVE N'%s' TO N'%s'", s.get("LogicalName"), s.get("RestoreAs"))).collect(Collectors.joining(", ")))
-                    .thenApply(moves -> String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, %s, NOUNLOAD, STATS = 5, REPLACE", target, file, moves))
+            var result = new ObjectHolder<>(CompletableFuture.completedFuture(null));
+            action.getFiles().forEach(file -> {
+                result.setValue(
+                        result.getValue().thenCompose(x -> connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + file.getFile().getPath() + "';"))
+                                .thenApply(temp::setFiles)
+                                .thenCompose(x -> determineTargetPath())
+                                .thenApply(temp::setLocation)
+                                .thenAccept(this::defaultFileNames)
+                                .thenApply(v -> determineRestoreQuery(action, file, temp))
 
-                    .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
-                    .thenApply(x -> null)
-                    .exceptionally(e -> null);
+                                .thenCompose(sql -> connection.addWarningConsumer(this::progress).execute(sql))
+                                .thenApply(x -> null)
+                                .exceptionally(e -> null)
+                );
+            });
+            return result.getValue();
+        }
+
+        private String determineRestoreQuery(RestoreAction action, RemoteFileWithMeta file, RestoreTemp temp) {
+            if (action.getType(file) == BackupType.FULL) {
+                if (AppSettingsState.getInstance().isAskForRestoreFileLocations()) {
+                    askForFileLocations(temp);
+                }
+
+                var recovery = action.partialBackup == null ? "" : "NORECOVERY, ";
+                var moves = temp.files.stream().map(s -> String.format("MOVE N'%s' TO N'%s'", s.get("LogicalName"), s.get("RestoreAs"))).collect(Collectors.joining(", "));
+                return String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, %s, %s NOUNLOAD, STATS = 5, REPLACE", target, file.getFile().getPath(), moves, recovery);
+            } else {
+                return String.format("RESTORE DATABASE [%s] FROM DISK = N'%s' WITH file = 1, NOUNLOAD, STATS = 5", target, file.getFile().getPath());
+            }
         }
 
         private void defaultFileNames(RestoreTemp temp) {
@@ -245,5 +298,15 @@ public class Restore extends DumbAwareAction {
     public static class RestoreTemp {
         private List<Map<String, Object>> files;
         private String location;
+    }
+
+    public record RestoreAction(@NotNull RemoteFileWithMeta fullBackup, @Nullable RemoteFileWithMeta partialBackup) {
+        public StreamEx<RemoteFileWithMeta> getFiles() {
+            return StreamEx.of(fullBackup, partialBackup).nonNull();
+        }
+
+        public BackupType getType(RemoteFileWithMeta bak) {
+            return fullBackup == bak ? BackupType.FULL : partialBackup == bak ? BackupType.PARTIAL : BackupType.UNSUPPORTED;
+        }
     }
 }

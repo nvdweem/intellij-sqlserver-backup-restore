@@ -1,11 +1,13 @@
 package dev.niels.sqlbackuprestore.ui.filedialog;
 
+import com.intellij.openapi.vfs.NonPhysicalFileSystem;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileListener;
 import com.intellij.openapi.vfs.VirtualFileSystem;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.ui.SQLHelper;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import org.jetbrains.annotations.NotNull;
@@ -14,9 +16,12 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Lists files from the connection
  */
+@Getter
+@NoArgsConstructor(force = true)
 @RequiredArgsConstructor
-class DatabaseFileSystem extends VirtualFileSystem {
-    @Getter private final Client connection;
+public class DatabaseFileSystem extends VirtualFileSystem implements NonPhysicalFileSystem {
+    private static final String PROTOCOL = "mssqldb";
+    private final Client connection;
 
     @SneakyThrows
     public VirtualFile[] getRoots() {
@@ -26,13 +31,13 @@ class DatabaseFileSystem extends VirtualFileSystem {
     @NotNull
     @Override
     public String getProtocol() {
-        return "mssqlDb";
+        return PROTOCOL;
     }
 
     @Nullable
     @Override
     public VirtualFile findFileByPath(@NotNull String path) {
-        return null;
+        return new RemoteFile(this, null, path, false, true);
     }
 
     @Override

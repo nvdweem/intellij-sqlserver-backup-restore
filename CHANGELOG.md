@@ -1,6 +1,7 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+- Add support for differential backups (pick both files when restoring)
 
 ## [1.0.5]
 - Idea 2024.1 compatible

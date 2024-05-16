@@ -8,6 +8,7 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <applicationService serviceImplementation="dev.niels.sqlbackuprestore.AppSettingsState"/>
+        <virtualFileSystem implementationClass="dev.niels.sqlbackuprestore.ui.filedialog.DatabaseFileSystem" key="mssqldb" physical="false"/>
 
         <applicationConfigurable parentId="tools" instance="dev.niels.sqlbackuprestore.SettingsConfigurable"
                                  id="dev.niels.sqlbackuprestore.SettingsConfigurable" displayName="SQLServer Backup And Restore"/>

@@ -12,27 +12,24 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.Optional;
 
-import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.SAVE;
 import static dev.niels.sqlbackuprestore.ui.filedialog.FileDialog.getSelectionKeyName;
 
 /**
  * The regular FileSaverDialogImpl seems to lean a bit too much on regular files and not remote files.
  */
 class Chooser extends FileSaverDialogImpl {
-    private final DialogType type;
     private final Project project;
     private RemoteFile chosen;
 
-    public Chooser(DialogType type, @NotNull FileSaverDescriptor descriptor, @Nullable Project project) {
+    public Chooser(@NotNull FileSaverDescriptor descriptor, @Nullable Project project) {
         super(descriptor, project);
-        this.type = type;
         this.project = project;
     }
 
     @Override
     public void setOKActionEnabled(boolean isEnabled) {
         var selected = getSelectedFile();
-        getOKAction().setEnabled(selected != null && !selected.isDirectory() && (type == SAVE || selected.exists()));
+        getOKAction().setEnabled(selected != null && !selected.isDirectory());
     }
 
     /**
@@ -59,10 +56,10 @@ class Chooser extends FileSaverDialogImpl {
     protected void doOKAction() {
         var file = getSelectedFile();
 
-        if (type == SAVE && file != null && file.isExists() && Messages.YES != Messages.showYesNoDialog(getRootPane(),
+        if (file != null && file.isExists() && Messages.YES != Messages.showYesNoDialog(getRootPane(),
                 UIBundle.message("file.chooser.save.dialog.confirmation", file.getName()),
                 UIBundle.message("file.chooser.save.dialog.confirmation.title"),
-                Messages.getWarningIcon()) || (type == DialogType.LOAD && (file == null || !file.exists()))) {
+                Messages.getWarningIcon())) {
             return;
         }
 
