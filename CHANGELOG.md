@@ -1,6 +1,7 @@
 # SQLServer Backup and Restore Changelog
 
 ## [Unreleased]
+- Added support for IntelliJ 2024.3
 
 ## [1.0.6]
 - Add support for differential backups (pick both files when restoring)

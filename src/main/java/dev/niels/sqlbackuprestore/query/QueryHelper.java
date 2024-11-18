@@ -7,11 +7,15 @@ import com.intellij.database.psi.DbNamespaceImpl;
 import com.intellij.database.util.DbImplUtil;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.CommonDataKeys;
+import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+
+import static com.intellij.openapi.actionSystem.PlatformCoreDataKeys.PSI_ELEMENT_ARRAY;
 
 /**
  * Helper to go from actions to table names or connections.
@@ -27,7 +31,7 @@ public abstract class QueryHelper {
     }
 
     private static Optional<DbNamespaceImpl> getNamespace(@NotNull AnActionEvent e) {
-        var element = e.getData(CommonDataKeys.PSI_ELEMENT);
+        var element = getPsiElement(e);
         while (element != null && (!(element instanceof DbNamespaceImpl) || !(((DbElement) element).getDelegate() instanceof MsDatabase))) {
             element = element.getParent();
         }
@@ -35,11 +39,22 @@ public abstract class QueryHelper {
     }
 
     private static Optional<DbDataSource> getSource(@NotNull AnActionEvent e) {
-        var element = e.getData(CommonDataKeys.PSI_ELEMENT);
+        var element = getPsiElement(e);
         while (element != null && !(element instanceof DbDataSource)) {
             element = element.getParent();
         }
         return Optional.ofNullable(element == null ? null : (DbDataSource) element);
+    }
+
+    private static @Nullable PsiElement getPsiElement(@NotNull AnActionEvent e) {
+        var element = e.getData(CommonDataKeys.PSI_ELEMENT);
+        if (element == null) {
+            var arr = e.getData(PSI_ELEMENT_ARRAY);
+            if (arr != null && arr.length > 0) {
+                element = arr[0];
+            }
+        }
+        return element;
     }
 
     public static Optional<MsDatabase> getDatabase(@NotNull AnActionEvent e) {
