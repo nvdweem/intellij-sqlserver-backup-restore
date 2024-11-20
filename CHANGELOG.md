@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Fixed npe when restoring while there is no initial folder known
+- (build) Switched to the new build plugin
+- (build) Hide a call to an @OverrideOnly method
+
 ## 1.0.7 - 2024-11-18
 
 - Added support for IntelliJ 2024.3
