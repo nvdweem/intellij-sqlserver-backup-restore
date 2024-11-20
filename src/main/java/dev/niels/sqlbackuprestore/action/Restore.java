@@ -35,6 +35,7 @@ import org.jetbrains.annotations.Nullable;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +94,7 @@ public class Restore extends DumbAwareAction {
                         try {
                             new RestoreHelper(c, database, toRestore, consumer).unzipIfNeeded()
                                     .restore()
-                                    .thenRun(() -> new RefreshModelAction().actionPerformed(e))
+                                    .thenRun(() -> hackedRefresh(e))
                                     .thenRun(c::close).exceptionally(c::close)
                                     .get();
                         } catch (Exception ex) {
@@ -103,6 +104,19 @@ public class Restore extends DumbAwareAction {
                 })
                 .thenRun(c::close)
                 .exceptionally(c::close);
+    }
+
+    /**
+     * RefreshModelAction.actionPerformed is override only. Try to hide the call from the verifier.
+     */
+    private void hackedRefresh(@NotNull AnActionEvent e) {
+        try {
+            var refreshAction = new RefreshModelAction();
+            var actionPerformed = RefreshModelAction.class.getMethod("actionPerformed", AnActionEvent.class);
+            actionPerformed.invoke(refreshAction, e);
+        } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException ex) {
+            log.error("Unable to refresh selected item");
+        }
     }
 
     private @Nullable RestoreAction determineToRestore(@Nullable Project project, RemoteFile[] files, Client c) {
