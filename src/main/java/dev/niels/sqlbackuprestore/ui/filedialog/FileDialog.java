@@ -72,7 +72,7 @@ public class FileDialog {
         descriptor.setForcedToUseIdeaFileChooser(true);
 
         var chooser = FileChooserFactory.getInstance().createFileChooser(descriptor, project, null);
-        var choice = chooser.choose(project, initial, initial);
+        var choice = initial == null ? chooser.choose(project) : chooser.choose(project, initial, initial);
 
         var result = StreamEx.of(choice).select(RemoteFile.class).toArray(RemoteFile[]::new);
         if (result.length > 0) {
