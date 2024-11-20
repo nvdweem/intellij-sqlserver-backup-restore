@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.8 - 2024-11-20
+
 - Fixed npe when restoring while there is no initial folder known
 - (build) Switched to the new build plugin
 - (build) Hide a call to an @OverrideOnly method
