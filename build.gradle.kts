@@ -25,6 +25,7 @@ repositories {
 dependencies {
     intellijPlatform {
         instrumentationTools()
+        zipSigner()
 
         create(properties("platformType"), properties("platformVersion"), false)
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
