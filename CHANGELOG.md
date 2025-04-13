@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- #57 - Fixed update without where clause warning when using download option
+## 1.0.9 - 2025-04-13
+
+- #57 - Fixed `update without where` clause warning when using download option
 
 ## 1.0.8 - 2024-11-20
 
