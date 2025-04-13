@@ -1,11 +1,12 @@
+import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 
 fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.1.0"
-    id("io.freefair.lombok") version "8.11"
+    id("org.jetbrains.intellij.platform") version "2.5.0"
+    id("io.freefair.lombok") version "8.13.1"
     id("org.jetbrains.changelog") version "2.2.1"
 }
 
@@ -24,7 +25,6 @@ repositories {
 
 dependencies {
     intellijPlatform {
-        instrumentationTools()
         zipSigner()
 
         create(properties("platformType"), properties("platformVersion"), false)
@@ -53,14 +53,13 @@ intellijPlatform {
 
         // Get the latest available change notes from the changelog file
         changeNotes.set(provider {
-            changelog.run {
+            changelog.renderItem(changelog.run {
                 getOrNull(properties("pluginVersion")) ?: getLatest()
-            }.toHTML()
+            }, outputType = Changelog.OutputType.HTML)
         })
 
         ideaVersion {
             sinceBuild.set(properties("pluginSinceBuild"))
-//            untilBuild.set(properties("pluginUntilBuild"))
         }
     }
 
