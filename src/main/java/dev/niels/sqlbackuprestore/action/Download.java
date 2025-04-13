@@ -61,8 +61,8 @@ public class Download extends DumbAwareAction {
                         ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), source.getLength())));
                         var col = compressed.get() ? "COMPRESS(BulkColumn)" : "BulkColumn";
 
-                        c.execute("SELECT CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
-                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f) where 1=1;"))
+                        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
+                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f) where id = 1;"))
                                 .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
                                     var name = source.getName() + (compressed.get() ? ".gzip" : "");
                                     var target = getFile(e, name);
