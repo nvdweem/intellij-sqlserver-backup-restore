@@ -7,7 +7,7 @@ plugins {
     id("java")
     id("org.jetbrains.intellij.platform") version "2.5.0"
     id("io.freefair.lombok") version "8.14.2"
-    id("org.jetbrains.changelog") version "2.2.1"
+    id("org.jetbrains.changelog") version "2.4.0"
 }
 
 group = properties("pluginGroup")
