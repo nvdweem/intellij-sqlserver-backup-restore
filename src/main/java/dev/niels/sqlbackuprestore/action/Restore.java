@@ -29,6 +29,7 @@ import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.StreamEx;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -72,7 +73,7 @@ public class Restore extends DumbAwareAction {
                         return;
                     }
 
-                    var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(StringUtils.removeEnd(StringUtils.removeEnd(files[0].getName(), ".gzip"), ".bak"))));
+                    var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(Strings.CS.removeEnd(Strings.CS.removeEnd(files[0].getName(), ".gzip"), ".bak"))));
                     if (StringUtils.isBlank(database)) {
                         return;
                     }
@@ -206,7 +207,7 @@ public class Restore extends DumbAwareAction {
             var files = action.getFiles().map(RemoteFileWithMeta::getFile).map(RemoteFile::getPath).toList();
             for (var file : files) {
                 if (file.toLowerCase().endsWith(".gzip")) {
-                    var unzipped = StringUtils.appendIfMissing(StringUtils.removeEndIgnoreCase(file, ".gzip"), ".bak");
+                    var unzipped = Strings.CS.appendIfMissing(Strings.CI.removeEnd(file, ".gzip"), ".bak");
                     try (var fis = new FileInputStream(file); var gzis = new GZIPInputStream(fis); var fos = new FileOutputStream(unzipped)) {
                         byte[] buffer = new byte[1024];
                         int length;
@@ -274,7 +275,7 @@ public class Restore extends DumbAwareAction {
 
         private String determineFileName(String path, Map<String, Object> values) {
             var type = (String) values.get("Type");
-            var ext = StringUtils.equalsIgnoreCase(type, "L") ? "_log.ldf" : ".mdf";
+            var ext = Strings.CI.equals(type, "L") ? "_log.ldf" : ".mdf";
             return StringUtils.stripEnd(path, "/\\") + '\\' + uniqueName(target, ext);
         }
 

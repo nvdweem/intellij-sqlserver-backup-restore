@@ -1,5 +1,6 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 
 fun properties(key: String) = project.findProperty(key).toString()
 
@@ -72,6 +73,12 @@ intellijPlatform {
     publishing {
         token.set(System.getenv("INTELLIJ_TOKEN"))
         channels.set(listOf("default"))
+    }
+
+    pluginVerification {
+        ides {
+            create(IntelliJPlatformType.IntellijIdeaUltimate, properties("pluginVerifyVersion"))
+        }
     }
 
     buildSearchableOptions.set(true)

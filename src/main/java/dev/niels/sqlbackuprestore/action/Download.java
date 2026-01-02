@@ -23,7 +23,7 @@ import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -70,7 +70,7 @@ public class Download extends DumbAwareAction {
                                         c.close();
                                         return;
                                     }
-                                    if (compressed.get() && !StringUtils.endsWithIgnoreCase(target.getAbsolutePath(), ".gzip")) {
+                                    if (compressed.get() && !Strings.CI.endsWith(target.getAbsolutePath(), ".gzip")) {
                                         target = new File(target.getAbsolutePath() + ".gzip");
                                     }
                                     new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
@@ -172,7 +172,7 @@ public class Download extends DumbAwareAction {
                     // Get the next part and store it
                     return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part, part), (cols, rows) -> {
                         try {
-                            write(fos, rows.get(0).getValue(0));
+                            write(fos, rows.getFirst().getValue(0));
                             indicator.setFraction(current / parts);
                             indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
                         } catch (Exception e) {
@@ -189,14 +189,11 @@ public class Download extends DumbAwareAction {
          * Write a single part to the file stream
          */
         private void write(FileOutputStream fos, Object blob) throws IOException, SQLException {
-            if (blob instanceof RemoteBlob) {
-                saveBlob(fos, (RemoteBlob) blob);
-            } else if (blob instanceof byte[]) {
-                saveBlob(fos, (byte[]) blob);
-            } else if (blob instanceof String) {
-                saveBlob(fos, (String) blob); // Haven't actually seen this happen...
-            } else {
-                throw new IllegalArgumentException("Unable to download column of type " + blob.getClass().getName());
+            switch (blob) {
+                case RemoteBlob remoteBlob -> saveBlob(fos, remoteBlob);
+                case byte[] bytes -> saveBlob(fos, bytes);
+                case String s -> saveBlob(fos, s); // Haven't actually seen this happen...
+                default -> throw new IllegalArgumentException("Unable to download column of type " + blob.getClass().getName());
             }
         }
 

@@ -16,7 +16,7 @@ import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Set;
@@ -83,7 +83,7 @@ public class Backup extends DumbAwareAction {
                 .thenApply(c::closeAndReturn)
                 .exceptionally(c::close)
                 .thenCompose(x -> c.getSingle(String.format("USE [%s] exec sp_spaceused @oneresultset = 1", name), "reserved", String.class)
-                        .thenApply(kb -> Long.parseLong(StringUtils.removeEnd(kb, " KB")) * 1024)
+                        .thenApply(kb -> Long.parseLong(Strings.CS.removeEnd(kb, " KB")) * 1024)
                         .thenApply(target::setLength));
 
         c.addWarningConsumer((type, msg) -> {
