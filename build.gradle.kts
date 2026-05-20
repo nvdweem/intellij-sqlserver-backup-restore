@@ -24,7 +24,7 @@ dependencies {
     intellijPlatform {
         zipSigner()
 
-        create(properties("platformType"), properties("platformVersion"), false)
+        create(properties("platformType"), properties("platformVersion")) { useInstaller = false }
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
     }
 }
