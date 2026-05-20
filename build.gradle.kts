@@ -6,21 +6,17 @@ fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.10.5"
+    id("org.jetbrains.intellij.platform") version "2.16.0"
     id("io.freefair.lombok") version "9.1.0"
-    id("org.jetbrains.changelog") version "2.5.0"
+    id("org.jetbrains.changelog")
 }
 
 group = properties("pluginGroup")
 version = properties("pluginVersion")
 
-// Configure project's dependencies
-repositories {
-    mavenCentral()
-
-    intellijPlatform {
-        defaultRepositories()
-        intellijDependencies()
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(properties("javaVersion").toInt()))
     }
 }
 
@@ -71,7 +67,7 @@ intellijPlatform {
     }
 
     publishing {
-        token.set(System.getenv("INTELLIJ_TOKEN"))
+        token.set(System.getenv("PUBLISH_TOKEN"))
         channels.set(listOf("default"))
     }
 
@@ -80,8 +76,6 @@ intellijPlatform {
             create(IntelliJPlatformType.IntellijIdeaUltimate, properties("pluginVerifyVersion"))
         }
     }
-
-    buildSearchableOptions.set(true)
 }
 
 // Configure Gradle Changelog Plugin - read more: https://github.com/JetBrains/gradle-changelog-plugin
@@ -91,14 +85,6 @@ changelog {
 }
 
 tasks {
-    // Set the JVM compatibility versions
-    properties("javaVersion").let {
-        withType<JavaCompile> {
-            sourceCompatibility = it
-            targetCompatibility = it
-        }
-    }
-
     wrapper {
         gradleVersion = properties("gradleVersion")
     }
