@@ -6,8 +6,8 @@ fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.16.0"
-    id("io.freefair.lombok") version "9.1.0"
+    id("org.jetbrains.intellij.platform")
+    id("io.freefair.lombok")
     id("org.jetbrains.changelog")
 }
 
@@ -67,7 +67,7 @@ intellijPlatform {
     }
 
     publishing {
-        token.set(System.getenv("PUBLISH_TOKEN"))
+        token.set(System.getenv("INTELLIJ_TOKEN"))
         channels.set(listOf("default"))
     }
 

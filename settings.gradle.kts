@@ -5,6 +5,7 @@ rootProject.name = "SQLServerBackupAndRestore"
 pluginManagement {
     plugins {
         id("org.jetbrains.changelog") version "2.5.0"
+        id("io.freefair.lombok") version "9.1.0"
     }
 }
 
