@@ -25,6 +25,16 @@ class Chooser extends FileSaverDialogImpl {
     }
 
     @Override
+    protected @NotNull String getRecentPathsStorageKey() {
+        return RemoteChooserRecents.STORAGE_KEY;
+    }
+
+    @Override
+    protected @NotNull String getPresentableUrl(@NotNull VirtualFile virtualFile) {
+        return RemoteChooserRecents.presentableUrl(virtualFile);
+    }
+
+    @Override
     public void setOKActionEnabled(boolean isEnabled) {
         var selected = getSelectedFile();
         getOKAction().setEnabled(selected != null && !selected.isDirectory());

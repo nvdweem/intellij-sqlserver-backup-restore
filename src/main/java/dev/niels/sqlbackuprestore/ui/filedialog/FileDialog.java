@@ -5,7 +5,6 @@ import com.intellij.notification.Notification;
 import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
-import com.intellij.openapi.fileChooser.FileChooserFactory;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -71,8 +70,8 @@ public class FileDialog {
         descriptor.setDescription(DESCRIPTION);
         descriptor.setForcedToUseIdeaFileChooser(true);
 
-        var chooser = FileChooserFactory.getInstance().createFileChooser(descriptor, project, null);
-        var choice = initial == null ? chooser.choose(project) : chooser.choose(project, initial, initial);
+        var chooser = new RemoteFileChooser(descriptor, project);
+        var choice = initial == null ? chooser.choose(project) : chooser.choose(project, initial);
 
         var result = StreamEx.of(choice).select(RemoteFile.class).toArray(RemoteFile[]::new);
         if (result.length > 0) {
