@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 1.0.10 - 2026-07-17
+
+- Added support for IntelliJ IDEA 2026.2 (now requires 2026.2 or later)
+- Fixed the restore file picker showing local files instead of the SQLServer instance
+- Fixed the file picker crashing when reopened after a file had been selected
+- The restore picker again expands to the previously selected file when reopened
+- The file dialog's refresh button now reloads the file list from the server
+
 ## 1.0.9 - 2025-04-13
 
 - #57 - Fixed `update without where` clause warning when using download option
