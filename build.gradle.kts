@@ -6,13 +6,24 @@ fun properties(key: String) = project.findProperty(key).toString()
 
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.10.5"
-    id("io.freefair.lombok") version "9.1.0"
+    id("org.jetbrains.intellij.platform") version "2.18.1"
+    id("io.freefair.lombok") version "9.5.0"
     id("org.jetbrains.changelog") version "2.5.0"
 }
 
 group = properties("pluginGroup")
 version = properties("pluginVersion")
+
+// The IntelliJ Platform is now compiled for Java 25 (class file version 69), so the
+// compiler must run on a JDK 25 toolchain even though we still target Java 21 bytecode
+// (keeping the plugin runnable on the `pluginSinceBuild` IDE). Gradle auto-detects the
+// JetBrains Runtime from ~/.jdks, so no machine-specific path is hardcoded here.
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+        vendor.set(JvmVendorSpec.JETBRAINS)
+    }
+}
 
 // Configure project's dependencies
 repositories {
@@ -28,13 +39,24 @@ dependencies {
     intellijPlatform {
         zipSigner()
 
-        create(properties("platformType"), properties("platformVersion"), false)
+        create(properties("platformType"), properties("platformVersion")) {
+            useInstaller = false
+        }
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
     }
 }
 
 // Configure Gradle IntelliJ Plugin - read more: https://github.com/JetBrains/gradle-intellij-plugin
 intellijPlatform {
+    // Disable bytecode instrumentation: there are no .form (GUI Designer) files, so it
+    // would only add @NotNull runtime assertions, which we don't rely on. It also runs
+    // IntelliJ's Javac2 Ant tool in-process in the Gradle daemon, which fails
+    // ("<JAVA_HOME>\Packages does not exist") when the daemon JVM is the Microsoft Build
+    // of OpenJDK — its non-standard java.ext.dirs points at a non-existent Packages dir
+    // (https://github.com/microsoft/openjdk/issues/339). Keeping this off makes the
+    // build independent of the daemon JDK vendor.
+    instrumentCode = false
+
     pluginConfiguration {
         name.set(properties("pluginName"))
         version.set(properties("pluginVersion"))
