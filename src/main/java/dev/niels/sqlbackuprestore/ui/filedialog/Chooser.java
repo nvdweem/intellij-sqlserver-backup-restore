@@ -91,23 +91,6 @@ class Chooser extends FileSaverDialogImpl {
 
     @Override
     protected void restoreSelection(@Nullable VirtualFile toSelect) {
-        if (toSelect == null) {
-            return;
-        }
-        restoreSelection(toSelect, () -> myFileSystemTree.expand(toSelect, null));
-    }
-
-    /**
-     * We must be doing something wrong but this is apparently needed, just selecting the file we want to select
-     * isn't enough. We need to open the tree one by one :(
-     */
-    private void restoreSelection(@Nullable VirtualFile toSelect, Runnable andThen) {
-        if (toSelect == null) {
-            if (andThen != null) {
-                andThen.run();
-            }
-        } else {
-            restoreSelection(toSelect.getParent(), () -> myFileSystemTree.select(toSelect, andThen));
-        }
+        RemoteChooserTree.restoreSelection(myFileSystemTree, toSelect);
     }
 }

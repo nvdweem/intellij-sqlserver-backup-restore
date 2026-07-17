@@ -25,4 +25,9 @@ class RemoteFileChooser extends FileChooserDialogImpl {
     protected @NotNull String getPresentableUrl(@NotNull VirtualFile virtualFile) {
         return RemoteChooserRecents.presentableUrl(virtualFile);
     }
+
+    @Override
+    protected void restoreSelection(@Nullable VirtualFile toSelect) {
+        RemoteChooserTree.restoreSelection(myFileSystemTree, toSelect);
+    }
 }
