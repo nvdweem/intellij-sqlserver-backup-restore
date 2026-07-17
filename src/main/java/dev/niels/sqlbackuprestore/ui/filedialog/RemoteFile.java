@@ -95,6 +95,11 @@ public class RemoteFile extends VirtualFile {
         return children;
     }
 
+    /** Drop the cached child list so the next {@link #getChildren()} re-queries the server. */
+    public void invalidateChildren() {
+        children = null;
+    }
+
     @Contract("_, true -> !null")
     public VirtualFile getChild(String name, boolean nonExistingIfNotFound) {
         for (VirtualFile child : getChildren()) {
