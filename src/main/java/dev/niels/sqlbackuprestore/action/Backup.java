@@ -9,13 +9,14 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
-import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
+import dev.niels.sqlbackuprestore.query.Sql;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 
@@ -79,28 +80,41 @@ public class Backup extends DumbAwareAction {
         c.setTitle("Backup " + name);
 
         var future = determineCompression(c)
-                .thenCompose(compress -> c.execute("BACKUP DATABASE [" + name + "] TO  DISK = N'" + target.getPath() + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD" + compress + ", STATS = 10"))
-                .thenApply(c::closeAndReturn)
-                .exceptionally(c::close)
-                .thenCompose(x -> c.getSingle(String.format("USE [%s] exec sp_spaceused @oneresultset = 1", name), "reserved", String.class)
-                        .thenApply(kb -> Long.parseLong(Strings.CS.removeEnd(kb, " KB")) * 1024)
-                        .thenApply(target::setLength));
-
-        c.addWarningConsumer((type, msg) -> {
-            if (type == MessageType.ERROR) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", msg, NotificationType.ERROR));
-            }
-        });
+                .thenCompose(compress -> c.execute("BACKUP DATABASE " + Sql.quoted(name) + " TO  DISK = N'" + Sql.literal(target.getPath())
+                        + "' WITH COPY_ONLY, NOFORMAT, INIT, SKIP, NOREWIND, NOUNLOAD" + compress + ", STATS = 10"))
+                // The size is only used to decide whether to offer extra compression when downloading, so a database
+                // that won't report it shouldn't fail a backup that already succeeded.
+                .thenCompose(x -> databaseSize(c, name).exceptionally(t -> null))
+                .thenApply(size -> size == null ? target : target.setLength(size))
+                .whenComplete((result, error) -> c.close());
 
         new ProgressTask(e.getProject(), "Creating backup", false, consumer -> {
             c.addWarningConsumer(consumer);
             try {
-                future.get();
+                future.join();
             } catch (Exception ex) {
-                // Don't really care ;)
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Backup failed", "Unable to back up " + name + ":\n" + rootMessage(ex), NotificationType.ERROR));
+            } finally {
+                c.removeWarningConsumer(consumer);
             }
         }).queue();
         return future;
+    }
+
+    /**
+     * Size of the database itself (not of the backup file), used to decide whether extra compression is worth offering.
+     */
+    private CompletableFuture<Long> databaseSize(Client c, String name) {
+        return c.getSingle("USE " + Sql.quoted(name) + " exec sp_spaceused @oneresultset = 1", "reserved", String.class)
+                .thenApply(reserved -> Long.parseLong(Strings.CS.removeEnd(StringUtils.trimToEmpty(reserved), " KB").trim()) * 1024);
+    }
+
+    private static String rootMessage(Throwable t) {
+        var cause = t;
+        while (cause.getCause() != null && cause.getMessage() == null) {
+            cause = cause.getCause();
+        }
+        return StringUtils.defaultIfBlank(cause.getMessage(), cause.toString());
     }
 
     private CompletableFuture<String> determineCompression(Client c) {
