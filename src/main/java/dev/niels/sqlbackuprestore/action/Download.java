@@ -21,8 +21,10 @@ import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
+import dev.niels.sqlbackuprestore.query.Sql;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -61,8 +63,8 @@ public class Download extends DumbAwareAction {
                         ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), source.getLength())));
                         var col = compressed.get() ? "COMPRESS(BulkColumn)" : "BulkColumn";
 
-                        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
-                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f) where id = 1;"))
+                        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + Sql.literal(source.getPath()) + "', SINGLE_BLOB) x;")
+                                .thenCompose(x -> c.execute("update #filedownload set fs = DATALENGTH(f) where id = 1;"))
                                 .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
                                     var name = source.getName() + (compressed.get() ? ".gzip" : "");
                                     var target = getFile(e, name);
@@ -74,10 +76,25 @@ public class Download extends DumbAwareAction {
                                         target = new File(target.getAbsolutePath() + ".gzip");
                                     }
                                     new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
-                                }));
+                                }))
+                                .exceptionally(t -> {
+                                    reportAndClose(c, t);
+                                    return null;
+                                });
+                    }).exceptionally(t -> {
+                        // Without this a backup that failed would never release the session it holds.
+                        reportAndClose(c, t);
+                        return null;
                     })
             );
         }
+    }
+
+    private static void reportAndClose(Client c, Throwable t) {
+        var cause = t.getCause() == null ? t : t.getCause();
+        Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Download failed",
+                StringUtils.defaultIfBlank(cause.getMessage(), cause.toString()), NotificationType.ERROR));
+        c.close();
     }
 
     @Nullable
@@ -86,7 +103,8 @@ public class Download extends DumbAwareAction {
         var path = property == null ? null : LocalFileSystem.getInstance().findFileByPath(property);
 
         if (AppSettingsState.getInstance().isUseDbNameOnDownload()) {
-            fileName = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null) + ".bak";
+            // Fall back to the backup's own name rather than proposing a file literally called "null.bak".
+            fileName = QueryHelper.getDatabase(e).map(DasObject::getName).map(name -> name + ".bak").orElse(fileName);
         }
         var wrapper = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose Local File", "Where to store the downloaded file"), e.getProject()).save(path, fileName);
         if (wrapper == null) {
@@ -94,7 +112,8 @@ public class Download extends DumbAwareAction {
         }
 
         var result = wrapper.getFile();
-        PropertiesComponent.getInstance(e.getProject()).getValue(FileDialog.KEY_PREFIX + "download", result.getParent());
+        // setValue, not getValue: reading it back here meant the chosen directory was never actually remembered.
+        PropertiesComponent.getInstance(e.getProject()).setValue(FileDialog.KEY_PREFIX + "download", result.getParent());
         return result;
     }
 
@@ -137,18 +156,35 @@ public class Download extends DumbAwareAction {
 
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
-            try (var fos = new FileOutputStream(target)) {
-                indicator.setIndeterminate(false);
-                indicator.setFraction(0.0);
+            try {
+                // The stream has to be closed before cleanIfCancelled runs: Windows refuses to delete an open file,
+                // so a cancelled download used to leave a half-written .bak behind.
+                try (var fos = new FileOutputStream(target)) {
+                    indicator.setIndeterminate(false);
+                    indicator.setFraction(0.0);
 
-                connection.getSingle("SELECT fs FROM #filedownload", "fs", Long.class)
-                        .thenCompose(s -> download(indicator, fos, s))
-                        .exceptionally(connection::close)
-                        .thenRun(connection::close)
-                        .thenRun(() -> cleanIfCancelled(indicator))
-                        .get();
+                    connection.getSingle("SELECT fs FROM #filedownload", "fs", Long.class)
+                            .thenCompose(s -> download(indicator, fos, s))
+                            .join();
+                } finally {
+                    dropTempTable();
+                    // Exactly once: the old exceptionally(close).thenRun(close) pair closed twice on failure.
+                    connection.close();
+                }
+                cleanIfCancelled(indicator);
             } catch (Exception e) {
                 Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
+            }
+        }
+
+        /**
+         * The blob is staged in a temp table that would otherwise sit in tempdb for as long as the session lives.
+         */
+        private void dropTempTable() {
+            try {
+                connection.execute("IF OBJECT_ID('tempdb..#filedownload') IS NOT NULL DROP TABLE #filedownload;").join();
+            } catch (Exception e) {
+                log.warn("Unable to drop the temporary download table", e);
             }
         }
 
@@ -156,6 +192,8 @@ public class Download extends DumbAwareAction {
             // Split into 100 parts unless the parts are smaller than 1MB
             var part = Math.max(1_000_000, (long) Math.ceil(s / 100d));
             var parts = Math.ceil((double) s / part);
+            // T-SQL SUBSTRING is 1-based. Starting at `current * part` made the first chunk one byte short and, when
+            // the total size was an exact multiple of the chunk size, dropped the very last byte of the download.
 
             CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
 
@@ -170,7 +208,7 @@ public class Download extends DumbAwareAction {
                     }
 
                     // Get the next part and store it
-                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part, part), (cols, rows) -> {
+                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part + 1, part), (cols, rows) -> {
                         try {
                             write(fos, rows.getFirst().getValue(0));
                             indicator.setFraction(current / parts);
