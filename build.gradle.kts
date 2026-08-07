@@ -44,6 +44,10 @@ dependencies {
         }
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
     }
+
+    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 // Configure Gradle IntelliJ Plugin - read more: https://github.com/JetBrains/gradle-intellij-plugin
@@ -83,6 +87,9 @@ intellijPlatform {
 
         ideaVersion {
             sinceBuild.set(properties("pluginSinceBuild"))
+            // Left empty on purpose: without this the plugin would inherit the build branch of whatever platform it
+            // was compiled against as an upper bound, so every new IDE release would mark it incompatible.
+            untilBuild.set(providers.gradleProperty("pluginUntilBuild").map { it.trim() }.filter { it.isNotEmpty() })
         }
     }
 
@@ -113,12 +120,18 @@ changelog {
 }
 
 tasks {
-    // Set the JVM compatibility versions
-    properties("javaVersion").let {
-        withType<JavaCompile> {
-            sourceCompatibility = it
-            targetCompatibility = it
-        }
+    // `release` rather than source/target compatibility: those only pick the language level and bytecode version while
+    // still compiling against the JDK 25 class library, so a Java 22+ API would compile here and fail on a Java 21 IDE.
+    withType<JavaCompile> {
+        options.release.set(properties("javaVersion").toInt())
+        // serial/this-escape fire on every DataRequest and DialogWrapper subclass and `try` on every explicit
+        // Client.close() - Client is reference counted on purpose - which is simply how these are meant to be used.
+        // Left on, they'd drown out the warnings that do mean something.
+        options.compilerArgs.add("-Xlint:all,-serial,-this-escape,-processing,-try")
+    }
+
+    test {
+        useJUnitPlatform()
     }
 
     wrapper {
