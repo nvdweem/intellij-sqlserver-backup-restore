@@ -10,16 +10,25 @@
         <applicationService serviceImplementation="dev.niels.sqlbackuprestore.AppSettingsState"/>
         <virtualFileSystem implementationClass="dev.niels.sqlbackuprestore.ui.filedialog.DatabaseFileSystem" key="mssqldb" physical="false"/>
 
+        <!-- Every notification this plugin raises uses this group; without registering it the platform logs a
+             "notification group is not registered" warning and the user can't configure the popups. -->
+        <notificationGroup id="SQL Backup and Restore" displayType="BALLOON"/>
+
         <applicationConfigurable parentId="tools" instance="dev.niels.sqlbackuprestore.SettingsConfigurable"
                                  id="dev.niels.sqlbackuprestore.SettingsConfigurable" displayName="SQLServer Backup And Restore"/>
     </extensions>
 
     <actions>
+        <!-- Action ids live in one IDE-wide namespace, so they carry the plugin package to avoid colliding with
+             another plugin's "backup"/"restore". -->
         <group id="dev.niels.sqlbackuprestore.maingroup" text="Backup / Restore" popup="true" class="dev.niels.sqlbackuprestore.action.Group">
             <add-to-group group-id="DatabaseViewPopupMenu" anchor="last"/>
-            <action id="backup" class="dev.niels.sqlbackuprestore.action.Backup" text="Backup" description="Backup from bak file"/>
-            <action id="download" class="dev.niels.sqlbackuprestore.action.Download" text="Backup and Download" description="Backup database and then download the file"/>
-            <action id="restore" class="dev.niels.sqlbackuprestore.action.Restore" text="Restore" description="Restore from bak file"/>
+            <action id="dev.niels.sqlbackuprestore.backup" class="dev.niels.sqlbackuprestore.action.Backup" text="Backup"
+                    description="Back the selected database up to a file on the server"/>
+            <action id="dev.niels.sqlbackuprestore.download" class="dev.niels.sqlbackuprestore.action.Download" text="Backup and Download"
+                    description="Backup database and then download the file"/>
+            <action id="dev.niels.sqlbackuprestore.restore" class="dev.niels.sqlbackuprestore.action.Restore" text="Restore"
+                    description="Restore the selected database from a backup file"/>
         </group>
     </actions>
 
