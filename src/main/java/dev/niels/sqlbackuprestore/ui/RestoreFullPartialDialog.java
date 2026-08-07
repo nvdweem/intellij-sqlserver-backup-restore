@@ -3,22 +3,25 @@ package dev.niels.sqlbackuprestore.ui;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.DialogWrapper;
+import com.intellij.ui.DoubleClickListener;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
 import dev.niels.sqlbackuprestore.action.Restore.RestoreAction;
 import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta;
 import lombok.Getter;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class RestoreFullPartialDialog extends DialogWrapper {
     private final Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials;
-    @Getter private RestoreAction result;
+    @Getter private @Nullable RestoreAction result;
 
     private RestoreFullPartialDialog(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials) {
         super(project);
@@ -29,13 +32,15 @@ public class RestoreFullPartialDialog extends DialogWrapper {
         setOKActionEnabled(false);
     }
 
-    public static RestoreAction choose(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials) {
-        RestoreFullPartialDialog[] dialog = new RestoreFullPartialDialog[1];
+    public static @Nullable RestoreAction choose(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials) {
+        var dialog = new RestoreFullPartialDialog[1];
+        var confirmed = new boolean[1];
         ApplicationManager.getApplication().invokeAndWait(() -> {
             dialog[0] = new RestoreFullPartialDialog(project, fullsWithPartials);
-            dialog[0].showAndGet();
+            confirmed[0] = dialog[0].showAndGet();
         });
-        return dialog[0].result;
+        // Only honour the selection when the dialog was actually closed with OK; cancelling must not restore anything.
+        return dialog[0] != null && confirmed[0] ? dialog[0].result : null;
     }
 
     private String[] fileToStringArr(RestoreAction action) {
@@ -71,11 +76,38 @@ public class RestoreFullPartialDialog extends DialogWrapper {
         table.getColumnModel().getColumn(3).setPreferredWidth(75);
         table.getSelectionModel().setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
 
-        table.getSelectionModel().addListSelectionListener(i -> {
-            result = actions.get(i.getFirstIndex());
-            setOKActionEnabled(true);
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (e.getValueIsAdjusting()) {
+                return;
+            }
+            updateSelection(table, actions);
         });
 
+        new DoubleClickListener() {
+            @Override protected boolean onDoubleClick(@NotNull MouseEvent event) {
+                if (table.rowAtPoint(event.getPoint()) < 0) {
+                    return false;
+                }
+                updateSelection(table, actions);
+                if (result == null) {
+                    return false;
+                }
+                doOKAction();
+                return true;
+            }
+        }.installOn(table);
+
         return new JBScrollPane(table);
+    }
+
+    /**
+     * Resolves the row the user actually selected (the selection event only reports the changed range, not the
+     * selection) and keeps the OK action in sync with it.
+     */
+    private void updateSelection(JBTable table, List<RestoreAction> actions) {
+        var viewRow = table.getSelectedRow();
+        var modelRow = viewRow < 0 ? -1 : table.convertRowIndexToModel(viewRow);
+        result = modelRow >= 0 && modelRow < actions.size() ? actions.get(modelRow) : null;
+        setOKActionEnabled(result != null);
     }
 }

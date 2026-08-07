@@ -8,7 +8,9 @@ import com.intellij.util.ui.UIUtil.ComponentStyle;
 import com.intellij.util.ui.UIUtil.FontColor;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import lombok.Getter;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JPanel;
 
@@ -43,7 +45,7 @@ public class AppSettingsComponent {
 
     public boolean isModified() {
         var current = AppSettingsState.getInstance();
-        var modified = !parse(compressionSize.getText()).equals(current.getCompressionSize());
+        var modified = parse(compressionSize.getText()) != current.getCompressionSize();
         modified |= useCompressedBackup.isSelected() != current.isUseCompressedBackup();
         modified |= useDbNameOnDownload.isSelected() != current.isUseDbNameOnDownload();
         modified |= askForRestoreFileLocations.isSelected() != current.isAskForRestoreFileLocations();
@@ -51,10 +53,19 @@ public class AppSettingsComponent {
         return modified;
     }
 
-    private Long parse(String in) {
+    /**
+     * Total parse of the compression size field: null, blank, unparseable and negative input all mean "always ask" (0).
+     */
+    private long parse(@Nullable String in) {
+        if (StringUtils.isBlank(in)) {
+            return 0L;
+        }
         try {
-            return NumberUtils.createNumber(in).longValue();
-        } catch (NumberFormatException e) {
+            var number = NumberUtils.createNumber(in.trim());
+            return number == null ? 0L : Math.max(0L, number.longValue());
+        } catch (RuntimeException e) {
+            // createNumber throws NumberFormatException for garbage, but has been known to throw other runtime
+            // exceptions on malformed input as well; any failure simply means "no threshold configured".
             return 0L;
         }
     }
