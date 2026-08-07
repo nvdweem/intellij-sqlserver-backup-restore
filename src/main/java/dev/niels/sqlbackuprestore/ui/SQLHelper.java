@@ -1,6 +1,7 @@
 package dev.niels.sqlbackuprestore.ui;
 
 import dev.niels.sqlbackuprestore.query.Client;
+import dev.niels.sqlbackuprestore.query.Sql;
 import lombok.SneakyThrows;
 
 import java.util.List;
@@ -8,6 +9,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public interface SQLHelper {
+    /** A registry read or a directory listing on a busy server can take a moment; two seconds was optimistic. */
+    int TIMEOUT_SECONDS = 10;
+
     @SneakyThrows
     static String getDefaultBackupDirectory(Client connection) {
         return (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +
@@ -16,7 +20,7 @@ public interface SQLHelper {
                 "else\n" +
                 "exec master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\\Microsoft\\MSSQLServer\\MSSQLServer', N'BackupDirectory', @BackupDirectory OUTPUT\n" +
                 "\n" +
-                "select @BackupDirectory as directory", "directory").get(2, TimeUnit.SECONDS);
+                "select @BackupDirectory as directory", "directory").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @SneakyThrows
@@ -32,14 +36,14 @@ public interface SQLHelper {
                 "    update #fixdrv set Name = Name + ':/', Type = 'Fixed' where Type IS NULL \n" +
                 "end\n" +
                 "select * from #fixdrv;\n" +
-                "drop table #fixdrv;").get(10, TimeUnit.SECONDS);
+                "drop table #fixdrv;").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @SneakyThrows
     static List<Map<String, Object>> getSQLPathChildren(Client connection, String path) {
         return connection.getResult("declare @Path nvarchar(255)\n" +
                 "declare @Name nvarchar(255)\n" +
-                "select @Path = N'" + path + "'\n" +
+                "select @Path = N'" + Sql.literal(path) + "'\n" +
                 "select @Name = null;\n" +
                 "\n" +
                 "create table #filetmpfin (Name nvarchar(255) NOT NULL, IsFile int NULL, FullName nvarchar(300) not NULL)\n" +
@@ -89,6 +93,6 @@ public interface SQLHelper {
                 "end \n" +
                 "\n" +
                 "SELECT Name, IsFile, FullName FROM #filetmpfin ORDER BY IsFile ASC, Name ASC \n" +
-                "drop table #filetmpfin").get(10, TimeUnit.SECONDS);
+                "drop table #filetmpfin").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 }
