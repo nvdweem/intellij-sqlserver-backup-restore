@@ -11,10 +11,13 @@ import com.intellij.openapi.util.Disposer;
 import dev.niels.sqlbackuprestore.Constants;
 import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import lombok.Getter;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
 public class Client implements AutoCloseable {
@@ -22,7 +25,9 @@ public class Client implements AutoCloseable {
     private final Auditor auditor;
     @Getter
     private final String dbName;
-    private int useCount = 1;
+    // Opened/closed from the EDT, from background tasks and from the database thread that completes a query.
+    private final AtomicInteger useCount = new AtomicInteger(1);
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public Client(Project project, LocalDataSource dataSource) {
         dbClient = DatabaseSessionManager.getFacade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
@@ -38,6 +43,10 @@ public class Client implements AutoCloseable {
     public Client addWarningConsumer(BiConsumer<MessageType, String> consumer) {
         auditor.addWarningConsumer(consumer);
         return this;
+    }
+
+    public void removeWarningConsumer(BiConsumer<MessageType, String> consumer) {
+        auditor.removeWarningConsumer(consumer);
     }
 
     private CompletableFuture<List<Map<String, Object>>> getResult(String query, BiConsumer<List<GridColumn>, List<GridRow>> consumer) {
@@ -56,15 +65,21 @@ public class Client implements AutoCloseable {
             if (r.isEmpty()) {
                 throw new IllegalStateException("Expected at least one result for " + query);
             }
-            return (T) r.get(0).get(column);
+            return (T) r.getFirst().get(column);
         });
     }
 
-    public <T> CompletableFuture<T> getSingle(String query, String column, Class<T> clazz) {
-        if (clazz == null) {
-            return null;
-        }
-        return getSingle(query, column);
+    /**
+     * Same as {@link #getSingle(String, String)}, but checks the value really is a {@code clazz} instead of letting an
+     * unchecked cast blow up somewhere down the chain.
+     */
+    public <T> CompletableFuture<T> getSingle(String query, String column, @NotNull Class<T> clazz) {
+        return this.<Object>getSingle(query, column).thenApply(value -> {
+            if (value != null && !clazz.isInstance(value)) {
+                throw new IllegalStateException("Expected " + column + " to be a " + clazz.getSimpleName() + " but got a " + value.getClass().getSimpleName());
+            }
+            return clazz.cast(value);
+        });
     }
 
     public CompletableFuture<List<Map<String, Object>>> withRows(String query, BiConsumer<List<GridColumn>, List<GridRow>> consumer) {
@@ -80,25 +95,40 @@ public class Client implements AutoCloseable {
     }
 
     public void open() {
-        ++useCount;
+        if (useCount.getAndIncrement() == 0) {
+            // Picked up again after everyone let go; it will need disconnecting once more.
+            closed.set(false);
+        }
     }
 
+    /**
+     * Releases one use of this client and disconnects once nobody holds it any more. Closing more often than opening
+     * used to push the counter below zero, which meant the session was never disconnected afterwards.
+     */
     @Override
     public void close() {
-        if (--useCount == 0) {
+        if (useCount.updateAndGet(count -> Math.max(0, count - 1)) == 0 && !closed.getAndSet(true)) {
             done();
         }
     }
 
-    public void cleanIfDone() {
-        if (!dbClient.getSession().isConnected()) {
-            var session = dbClient.getSession();
-            DatabaseSessionClient[] clients = session.getClients();
-            for (DatabaseSessionClient client : clients) {
-                session.detach(client);
-            }
-            Disposer.dispose(session);
+    /**
+     * Disposes the underlying session once it has disconnected.
+     *
+     * @return {@code true} when this client is finished with and can be forgotten about.
+     */
+    public boolean cleanIfDone() {
+        var session = dbClient.getSession();
+        // useCount > 0 means an action still holds this client - it may simply not have connected yet.
+        if (useCount.get() > 0 || session.isConnected()) {
+            return false;
         }
+
+        for (DatabaseSessionClient client : session.getClients()) {
+            session.detach(client);
+        }
+        Disposer.dispose(session);
+        return true;
     }
 
     /**

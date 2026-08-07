@@ -11,9 +11,10 @@ import com.intellij.psi.PsiElement;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 import static com.intellij.openapi.actionSystem.PlatformCoreDataKeys.PSI_ELEMENT_ARRAY;
 
@@ -21,7 +22,9 @@ import static com.intellij.openapi.actionSystem.PlatformCoreDataKeys.PSI_ELEMENT
  * Helper to go from actions to table names or connections.
  */
 public abstract class QueryHelper {
-    private static final List<Client> clients = new ArrayList<>();
+    // Finished clients are removed again: keeping every client ever opened would pin its session (and through it the
+    // project) for as long as the IDE runs. Copy-on-write because actions run on several threads.
+    private static final List<Client> clients = new CopyOnWriteArrayList<>();
 
     private QueryHelper() {
     }
@@ -63,12 +66,14 @@ public abstract class QueryHelper {
 
     public static Client client(@NotNull AnActionEvent e) {
         cleanOldClients();
-        var client = new Client(e.getProject(), getSource(e).map(DbImplUtil::getMaybeLocalDataSource).orElseThrow());
+        var dataSource = getSource(e).map(DbImplUtil::getMaybeLocalDataSource)
+                .orElseThrow(() -> new IllegalStateException("No SQL Server data source found for this selection"));
+        var client = new Client(Objects.requireNonNull(e.getProject(), "No project for this action"), dataSource);
         clients.add(client);
         return client;
     }
 
     public static void cleanOldClients() {
-        clients.forEach(Client::cleanIfDone);
+        clients.removeIf(Client::cleanIfDone);
     }
 }

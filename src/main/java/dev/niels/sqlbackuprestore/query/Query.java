@@ -5,6 +5,7 @@ import com.intellij.database.datagrid.DataRequest.RawQueryRequest;
 import com.intellij.database.datagrid.GridColumn;
 import com.intellij.database.datagrid.GridDataRequest;
 import com.intellij.database.datagrid.GridRow;
+import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.StreamEx;
@@ -15,6 +16,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 @Slf4j
@@ -29,9 +31,25 @@ public class Query extends RawQueryRequest {
         super(owner, query, DataRequest.newConstraints(0, 5000, 0, 0, 0));
         this.consumer = consumer;
 
+        // A statement that fails still gets "processed", so without watching for the error a failed BACKUP/RESTORE
+        // would complete this future successfully with zero rows and be reported to the user as a success.
+        var failure = new AtomicReference<String>();
+        BiConsumer<MessageType, String> errorWatcher = (type, message) -> {
+            if (type == MessageType.ERROR) {
+                failure.compareAndSet(null, message);
+            }
+        };
+        c.addWarningConsumer(errorWatcher);
+
         c.open();
         getPromise().onProcessed(x -> {
-            future.complete(result);
+            c.removeWarningConsumer(errorWatcher);
+            var error = failure.get();
+            if (error != null) {
+                future.completeExceptionally(new QueryException(error, query));
+            } else {
+                future.complete(result);
+            }
             c.close();
         });
     }
@@ -54,6 +72,24 @@ public class Query extends RawQueryRequest {
 
     @Override public void afterLastRowAdded(@NotNull GridDataRequest.Context context, int total) {
         super.afterLastRowAdded(context, total);
+        // Completing as soon as the rows are in keeps result-producing queries as responsive as they were; statements
+        // that produce no rows at all (BACKUP, RESTORE) are completed by onProcessed, which is where failures land.
         future.complete(result);
+    }
+
+    /**
+     * Carries the server's message so the notification the user sees says what actually went wrong.
+     */
+    public static class QueryException extends RuntimeException {
+        private final transient String query;
+
+        public QueryException(String message, String query) {
+            super(message);
+            this.query = query;
+        }
+
+        public String getQuery() {
+            return query;
+        }
     }
 }

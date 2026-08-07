@@ -9,12 +9,13 @@ import com.intellij.database.datagrid.DataRequest.Context;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.HashSet;
-import java.util.Set;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
 public class Auditor implements DataAuditor {
-    private final Set<BiConsumer<MessageType, String>> consumers = new HashSet<>();
+    // Messages arrive on the database thread while consumers are (un)registered from the EDT or a task thread.
+    private final List<BiConsumer<MessageType, String>> consumers = new CopyOnWriteArrayList<>();
 
     public enum MessageType {
         PRINT, WARN, ERROR
@@ -24,10 +25,17 @@ public class Auditor implements DataAuditor {
         consumers.add(consumer);
     }
 
+    /**
+     * Consumers outlive the operation that registered them unless they're removed, which both leaks them and lets a
+     * finished task keep reacting to messages from the next one.
+     */
+    public void removeWarningConsumer(BiConsumer<MessageType, String> consumer) {
+        consumers.remove(consumer);
+    }
+
     private void produce(MessageType type, String s) {
-        if (!consumers.isEmpty()) {
-            consumers.forEach(c -> c.accept(type, s));
-        }
+        var message = s == null ? "" : s;
+        consumers.forEach(c -> c.accept(type, message));
     }
 
     @Override
