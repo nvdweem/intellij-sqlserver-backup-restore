@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Fixed downloaded backups losing their last byte when the file size was an exact multiple of the chunk size
+- Fixed failed backups and restores being reported as successful
+- Fixed the restore dialog restoring a different backup than the one selected, and cancelling it acting like OK
+- Fixed restoring a `.gzip` backup, which never actually used the unpacked file
+- Fixed differential backups being paired with the wrong full backup when the log sequence numbers were large
+- Fixed the "Close connections?" step killing the plugin's own session and starting the restore before the others were gone
+- Fixed the download dialog never remembering the directory you picked last time
+- Fixed a cancelled download leaving the half-written file behind on Windows
+- Database names and file paths containing quotes or brackets no longer break (or alter) the generated SQL
+- Restore file locations are now validated, and the last edited cell is no longer lost when confirming
+- Restore now follows the server's own path separator instead of assuming Windows
+- Notifications are registered properly, so they can be configured from Settings | Notifications
+- Added unit tests and wired `test`/`verifyPlugin` into CI
+
 ## 1.0.10 - 2026-07-17
 
 - Added support for IntelliJ IDEA 2026.2 (now requires 2026.2 or later)
