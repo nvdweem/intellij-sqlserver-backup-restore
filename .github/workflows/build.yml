@@ -1,9 +1,7 @@
 # GitHub Actions Workflow created for testing and preparing the plugin release in following steps:
 # - validate Gradle Wrapper,
-# - run 'test' and 'verifyPlugin' tasks,
-# - run Qodana inspections,
+# - run the 'test' and 'verifyPlugin' tasks,
 # - run 'buildPlugin' task and prepare artifact for the further tests,
-# - run 'runPluginVerifier' task,
 # - create a draft release.
 #
 # Workflow is triggered on push and pull_request events.
@@ -20,6 +18,14 @@ on:
   # Trigger the workflow on any pull request
   pull_request:
   workflow_dispatch:
+
+# Only the newest run per branch/PR is interesting; the older ones just occupy runners downloading IDEs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -54,7 +60,7 @@ jobs:
         with:
           distribution: jetbrains
           java-version: 25
-          cache: gradle
+          # No 'cache: gradle' here on purpose - setup-gradle below owns the Gradle cache and the two fight over it.
 
       # Setup Gradle
       - name: Setup Gradle
@@ -80,7 +86,16 @@ jobs:
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-          ./gradlew printProductsReleases # prepare list of IDEs for Plugin Verifier
+      # Run the unit tests
+      - name: Run Tests
+        run: ./gradlew test
+
+      - name: Upload Test Report
+        uses: actions/upload-artifact@v6
+        if: ${{ always() }}
+        with:
+          name: test-report
+          path: ${{ github.workspace }}/build/reports/tests
 
       # Build plugin
       - name: Build plugin
@@ -105,13 +120,61 @@ jobs:
           path: ./build/distributions/content/*/*
 
 
+  # Run the JetBrains Plugin Verifier against the IDE configured in build.gradle.kts. It was configured there but
+  # never actually invoked, so nothing was checking that the plugin still binds to the platform APIs it uses.
+  verify:
+    name: Verify Plugin
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximize Build Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+
+      - name: Fetch Sources
+        uses: actions/checkout@v6
+
+      - name: Gradle Wrapper Validation
+        uses: gradle/actions/wrapper-validation@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: jetbrains
+          java-version: 25
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+        with:
+          cache-cleanup: 'always'
+
+      # The verifier downloads a full IDE, so keep it cached between runs
+      - name: Setup Plugin Verifier IDEs Cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.pluginVerifier
+          key: plugin-verifier-${{ hashFiles('gradle.properties') }}
+
+      - name: Run Plugin Verification
+        run: ./gradlew verifyPlugin
+
+      - name: Upload Verification Report
+        uses: actions/upload-artifact@v6
+        if: ${{ always() }}
+        with:
+          name: plugin-verifier-report
+          path: ${{ github.workspace }}/build/reports/pluginVerifier
+
   # Prepare a draft release for GitHub Releases page for the manual verification
   # If accepted and published, release workflow would be triggered
   releaseDraft:
     name: Release Draft
     if: github.event_name != 'pull_request'
-    needs: build
+    needs: [ build, verify ]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
 
       # Check out current repository
@@ -125,17 +188,25 @@ jobs:
         run: |
           gh api repos/{owner}/{repo}/releases \
             --jq '.[] | select(.draft == true) | .id' \
-            | xargs -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
+            | xargs -r -I '{}' gh api -X DELETE repos/{owner}/{repo}/releases/{}
 
       # Create new release draft - which is not publicly visible and requires manual acceptance
       - name: Create Release Draft
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.build.outputs.version }}
+          CHANGELOG: ${{ needs.build.outputs.changelog }}
+        shell: bash
         run: |
-          gh release create v${{ needs.build.outputs.version }} \
+          # pluginVersion is only bumped when a release is prepared, so every push in between would otherwise try to
+          # create a tag that already exists and fail the job.
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "::notice::Release v$VERSION already exists, skipping the draft. Bump pluginVersion to cut a new one."
+            exit 0
+          fi
+
+          printf '%s\n' "$CHANGELOG" > release-notes.md
+          gh release create "v$VERSION" \
             --draft \
-            --title "v${{ needs.build.outputs.version }}" \
-            --notes "$(cat << 'EOM'
-          ${{ needs.build.outputs.changelog }}
-          EOM
-          )"
+            --title "v$VERSION" \
+            --notes-file release-notes.md

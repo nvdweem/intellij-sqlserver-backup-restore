@@ -6,12 +6,18 @@ on:
   release:
     types: [prereleased, released]
 
+permissions:
+  contents: read
+
 jobs:
 
   # Prepare and publish the plugin to the Marketplace repository
   release:
     name: Publish Plugin
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
 
       # Check out current repository
@@ -26,7 +32,11 @@ jobs:
         with:
           distribution: jetbrains
           java-version: 25
-          cache: gradle
+
+      # Owns the Gradle cache and validates the wrapper checksum before ./gradlew is ever executed - which matters
+      # most here, since this is the workflow that signs and publishes to the Marketplace.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
 
       # Set environment variables
       - name: Export Properties
@@ -59,11 +69,12 @@ jobs:
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
         run: ./gradlew publishPlugin
 
-      # Upload artifact as a release asset
+      # Upload artifact as a release asset. Only the signed archive: ./build/distributions/* would also attach the
+      # unsigned intermediate zip, leaving two near-identical downloads on the release page.
       - name: Upload Release Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*
+        run: gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*-signed.zip
 
       # Create pull request
       - name: Create Pull Request
@@ -78,6 +89,12 @@ jobs:
           git config user.name "GitHub Action"
 
           git checkout -b $BRANCH
+          # patchChangelog is a no-op when the Unreleased section already matches; committing nothing would exit 1 and
+          # fail the job *after* the plugin was already published.
+          if git diff --quiet; then
+            echo "::notice::CHANGELOG.md is already up to date, no pull request needed."
+            exit 0
+          fi
           git commit -am "Changelog update - $VERSION"
           git push --set-upstream origin $BRANCH
 
