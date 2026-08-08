@@ -21,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -144,6 +146,26 @@ class FileDetailsTest {
         assertEquals(List.of("shop.bak", "  2.0 kB"), fragments);
         // The point of the grey: detail rendered in the filename's own colour reads as part of the filename.
         assertEquals(List.of(false, true), greyed);
+    }
+
+    @Test
+    void installsItselfOnATreeOnlyOnce() {
+        var tree = new JTree();
+        var original = tree.getCellRenderer();
+
+        FileDetailsRenderer.installOn(tree);
+        var wrapped = tree.getCellRenderer();
+        FileDetailsRenderer.installOn(tree);
+
+        assertNotSame(original, wrapped, "the renderer was not wrapped");
+        // Both pickers install it, and the save dialog builds its panel more than once; wrapping a wrapper would
+        // append the details twice.
+        assertSame(wrapped, tree.getCellRenderer());
+    }
+
+    @Test
+    void toleratesATreeThatIsNotThere() {
+        assertDoesNotThrow(() -> FileDetailsRenderer.installOn(null));
     }
 
     @Test

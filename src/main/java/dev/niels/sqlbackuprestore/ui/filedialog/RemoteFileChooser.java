@@ -37,10 +37,7 @@ class RemoteFileChooser extends FileChooserDialogImpl {
     @Override
     protected JComponent createCenterPanel() {
         var panel = super.createCenterPanel();
-        var tree = tree();
-        if (tree != null && tree.getCellRenderer() != null) {
-            tree.setCellRenderer(new FileDetailsRenderer(tree.getCellRenderer()));
-        }
+        FileDetailsRenderer.installOn(tree());
         return panel;
     }
 

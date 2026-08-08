@@ -32,6 +32,17 @@ class FileDetailsRenderer implements TreeCellRenderer {
         this.delegate = delegate;
     }
 
+    /**
+     * Wraps {@code tree}'s renderer, if it has one. Shared by both pickers: the restore dialog and the save dialog are
+     * separate chooser classes, and hooking only one of them is why backups were listed with their size and date while
+     * choosing where to write one was not.
+     */
+    static void installOn(@Nullable JTree tree) {
+        if (tree != null && tree.getCellRenderer() != null && !(tree.getCellRenderer() instanceof FileDetailsRenderer)) {
+            tree.setCellRenderer(new FileDetailsRenderer(tree.getCellRenderer()));
+        }
+    }
+
     @Override
     public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean hasFocus) {
         var component = delegate.getTreeCellRendererComponent(tree, value, selected, expanded, leaf, row, hasFocus);
