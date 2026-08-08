@@ -4,6 +4,7 @@ import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Client;
@@ -58,13 +59,15 @@ public class Backup extends DumbAwareAction {
     }
 
     /**
-     * Asks for a (remote) file and backs the selected database up to that file.
-     * Must be called on the event thread.
+     * Asks for a file on the server and backs the selected database up to it. The dialog is opened synchronously,
+     * hence the event thread; the backup itself runs as a task and the future completes when it is done.
      *
-     * @param e the event that triggered the action (the database is retrieved from the action)
-     * @param c the connection that should be used for backing up (will be taken over if a backup is being made, close it from the future as well).
-     * @return a pair of the connection that should be closed and the file that was being selected. The original connection and null if no file was selected.
+     * @param e the event that triggered the action; the database is taken from it
+     * @param c the connection to back up over. A hold is taken on it for as long as the backup runs, so the caller
+     *          keeps its own hold and releases that separately.
+     * @return the file that was written, or {@code null} if the user chose no file or there was no database to back up
      */
+    @RequiresEdt
     protected CompletableFuture<RemoteFile> backup(@NotNull AnActionEvent e, Client c) {
         var database = QueryHelper.getDatabase(e);
         if (database.isEmpty()) {

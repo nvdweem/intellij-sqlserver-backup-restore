@@ -8,8 +8,10 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.Edt;
 import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
@@ -45,7 +47,6 @@ import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
-import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.zip.GZIPInputStream;
 
@@ -66,52 +67,7 @@ public class Restore extends DumbAwareAction {
         var c = QueryHelper.client(e);
         c.setTitle("Restore database");
 
-        CompletableFuture.runAsync(() -> {
-                    var target = QueryHelper.getDatabase(e).map(DasObject::getName);
-                    var chosen = invokeAndWait(() -> FileDialog.chooseFiles(null, e.getProject(), c, "Restore " + target.orElse("new database")));
-                    if (ArrayUtils.isEmpty(chosen)) {
-                        return;
-                    }
-
-                    var files = unzipIfNeeded(chosen);
-                    if (files == null) {
-                        return;
-                    }
-
-                    var database = target.orElseGet(() -> invokeAndWait(() -> promptDatabaseName(stripBackupExtensions(files[0].getName()))));
-                    if (StringUtils.isBlank(database)) {
-                        return;
-                    }
-
-                    var toRestore = determineToRestore(e.getProject(), files, c);
-                    if (toRestore == null) {
-                        return;
-                    }
-
-                    c.setTitle("Restore " + database);
-                    try {
-                        closeOtherConnections(e.getProject(), c, database);
-                    } catch (InterruptedException ex) {
-                        Thread.currentThread().interrupt();
-                        return;
-                    } catch (Exception ex) {
-                        Notifier.error(Constants.ERROR, "Unable to determine database usage or close connections", ex);
-                    }
-
-                    // Handed to the task below, which outlives this method.
-                    c.acquire();
-                    new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
-                        try {
-                            new RestoreHelper(c, database, toRestore, consumer).restore()
-                                    .thenRun(() -> hackedRefresh(e))
-                                    .join();
-                        } catch (Exception ex) {
-                            Notifier.error("Restore failed", "Unable to restore " + database, ex);
-                        } finally {
-                            c.release();
-                        }
-                    }).queue();
-                })
+        CompletableFuture.runAsync(() -> prepare(e, c))
                 .whenComplete((result, error) -> {
                     if (error != null) {
                         Notifier.error(Constants.ERROR, Notifier.rootMessage(error));
@@ -121,9 +77,63 @@ public class Restore extends DumbAwareAction {
     }
 
     /**
-     * RefreshModelAction.actionPerformed is override only. Try to hide the call from the verifier.
+     * Works out what to restore and where to, then hands over to {@link #queueRestore}. Runs off the event thread
+     * because it waits on the server between questions; each question is put back on the event thread individually.
+     * Returning early anywhere here means the user backed out, which is not worth reporting.
      */
-    private void hackedRefresh(@NotNull AnActionEvent e) {
+    @RequiresBackgroundThread
+    private void prepare(@NotNull AnActionEvent e, Client c) {
+        var existing = QueryHelper.getDatabase(e).map(DasObject::getName);
+
+        var chosen = Edt.compute(() -> FileDialog.chooseFiles(null, e.getProject(), c, "Restore " + existing.orElse("new database")));
+        if (ArrayUtils.isEmpty(chosen)) {
+            return;
+        }
+
+        var files = unzipIfNeeded(chosen);
+        if (files == null) {
+            return;
+        }
+
+        var database = existing.orElseGet(() -> Edt.compute(() -> promptDatabaseName(stripBackupExtensions(files[0].getName()))));
+        if (StringUtils.isBlank(database)) {
+            return;
+        }
+
+        var toRestore = chooseBackup(e.getProject(), files, c);
+        if (toRestore == null) {
+            return;
+        }
+
+        c.setTitle("Restore " + database);
+        if (!closeOtherConnections(e.getProject(), c, database)) {
+            return;
+        }
+
+        queueRestore(e, c, database, toRestore);
+    }
+
+    private void queueRestore(@NotNull AnActionEvent e, Client c, String database, RestoreAction toRestore) {
+        // Handed to the task, which outlives this method.
+        c.acquire();
+        new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
+            try {
+                new RestoreHelper(c, database, toRestore, consumer).restore()
+                        .thenRun(() -> refreshDatabaseTree(e))
+                        .join();
+            } catch (Exception ex) {
+                Notifier.error("Restore failed", "Unable to restore " + database, ex);
+            } finally {
+                c.release();
+            }
+        }).queue();
+    }
+
+    /**
+     * Makes the Database view pick up the database that was just restored. Called through reflection because
+     * RefreshModelAction.actionPerformed is override-only, which the plugin verifier would otherwise object to.
+     */
+    private void refreshDatabaseTree(@NotNull AnActionEvent e) {
         try {
             var refreshAction = new RefreshModelAction();
             var actionPerformed = RefreshModelAction.class.getMethod("actionPerformed", AnActionEvent.class);
@@ -172,7 +182,7 @@ public class Restore extends DumbAwareAction {
         return Strings.CI.removeEnd(Strings.CI.removeEnd(name, GZIP_EXTENSION), ".bak");
     }
 
-    private @Nullable RestoreAction determineToRestore(@Nullable Project project, RemoteFile[] files, Client c) {
+    private @Nullable RestoreAction chooseBackup(@Nullable Project project, RemoteFile[] files, Client c) {
         var withMeta = StreamEx.of(files)
                 .map(RemoteFileWithMeta.factory(c))
                 .toList();
@@ -195,8 +205,23 @@ public class Restore extends DumbAwareAction {
     /**
      * A database can't be restored while other sessions are using it, so offer to kick them out. Our own session is
      * left alone - killing it would take the restore down with it.
+     *
+     * @return whether the restore should go ahead. Failing to list or close the sessions is worth telling the user
+     * about, but the restore may well still work, so only an interruption stops it.
      */
-    private void closeOtherConnections(Project project, Client c, String target) throws ExecutionException, InterruptedException {
+    private boolean closeOtherConnections(Project project, Client c, String target) {
+        try {
+            killSessionsOn(project, c, target);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (Exception ex) {
+            Notifier.error(Constants.ERROR, "Unable to determine database usage or close connections", ex);
+        }
+        return true;
+    }
+
+    private void killSessionsOn(Project project, Client c, String target) throws ExecutionException, InterruptedException {
         c.withRows("""
                         SELECT
                             [Session ID]    = s.session_id,
@@ -215,7 +240,7 @@ public class Restore extends DumbAwareAction {
                         ORDER BY s.session_id;""".formatted(Sql.literal(target)), (cs, rs) -> {
                 })
                 .thenCompose(rows -> {
-                    if (rows.isEmpty() || Messages.YES != invokeAndWait(() -> Messages.showYesNoDialog(project,
+                    if (rows.isEmpty() || Messages.YES != Edt.compute(() -> Messages.showYesNoDialog(project,
                             String.format("There are %s sessions active on this database, do you want to close those?", rows.size()),
                             "Close Connections?",
                             Messages.getQuestionIcon()))) {
@@ -237,22 +262,6 @@ public class Restore extends DumbAwareAction {
     private String promptDatabaseName(String initial) {
         var name = Messages.showInputDialog("Create a new database from backup", "Database Name", null, initial, null);
         return StringUtils.stripToNull(name);
-    }
-
-    /**
-     * Helper invokeAndWait method that returns the value from the supplier.
-     */
-    public <T> T invokeAndWait(Supplier<T> supplier) {
-        var result = new CompletableFuture<T>();
-        // A supplier that throws used to leave the caller blocked forever on an empty queue.
-        ApplicationManager.getApplication().invokeAndWait(() -> {
-            try {
-                result.complete(supplier.get());
-            } catch (Throwable t) {
-                result.completeExceptionally(t);
-            }
-        });
-        return result.join();
     }
 
     @AllArgsConstructor

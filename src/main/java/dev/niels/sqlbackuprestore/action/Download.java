@@ -14,12 +14,16 @@ import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import dev.niels.sqlbackuprestore.AppSettingsState;
+import dev.niels.sqlbackuprestore.Edt;
 import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.query.Sql;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
+import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
@@ -35,9 +39,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Triggers backup and then allows downloading the result
+ * Backs the database up to a file on the server, then pulls that file down to the local machine in chunks.
  */
 public class Download extends DumbAwareAction {
+    private static final String GZIP_EXTENSION = ".gzip";
+
     @Override
     public @NotNull ActionUpdateThread getActionUpdateThread() {
         return ActionUpdateThread.BGT;
@@ -47,56 +53,72 @@ public class Download extends DumbAwareAction {
     public void actionPerformed(@NotNull AnActionEvent e) {
         var c = QueryHelper.client(e);
         try {
-            // Held for the asynchronous flow below, which outlives this method.
+            // Held for the asynchronous flow below, which outlives this method. Every path through it releases once.
             c.acquire();
-
-            ApplicationManager.getApplication().invokeLater(() ->
-                    new Backup().backup(e, c).thenAcceptAsync(source -> {
-                        if (source == null) {
-                            c.release();
-                            return;
-                        }
-
-                        AtomicBoolean compressed = new AtomicBoolean(false);
-                        ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), source.getLength())));
-                        var col = compressed.get() ? "COMPRESS(BulkColumn)" : "BulkColumn";
-
-                        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + Sql.literal(source.getPath()) + "', SINGLE_BLOB) x;")
-                                .thenCompose(x -> c.execute("update #filedownload set fs = DATALENGTH(f) where id = 1;"))
-                                .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
-                                    var name = source.getName() + (compressed.get() ? ".gzip" : "");
-                                    var target = getFile(e, name);
-                                    if (target == null) {
-                                        c.release();
-                                        return;
-                                    }
-                                    if (compressed.get() && !Strings.CI.endsWith(target.getAbsolutePath(), ".gzip")) {
-                                        target = new File(target.getAbsolutePath() + ".gzip");
-                                    }
-                                    new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
-                                }))
-                                .exceptionally(t -> {
-                                    reportAndRelease(c, t);
-                                    return null;
-                                });
-                    }).exceptionally(t -> {
-                        // Without this a backup that failed would never release the session it holds.
-                        reportAndRelease(c, t);
-                        return null;
-                    })
-            );
+            ApplicationManager.getApplication().invokeLater(() -> takeBackup(e, c));
         } finally {
             c.release();
         }
     }
 
-    private static void reportAndRelease(Client c, Throwable t) {
+    /**
+     * Step 1, on the event thread because it opens the "where on the server" dialog.
+     */
+    @RequiresEdt
+    private void takeBackup(@NotNull AnActionEvent e, Client c) {
+        new Backup().backup(e, c)
+                .thenAcceptAsync(backup -> {
+                    if (backup == null) {
+                        c.release(); // No file was chosen, so nothing was backed up.
+                    } else {
+                        readIntoTempTable(e, c, backup);
+                    }
+                })
+                // Without this a backup that failed would never release the session it holds.
+                .exceptionally(t -> reportAndRelease(c, t));
+    }
+
+    /**
+     * Step 2, off the event thread: the server reads its own backup file into a temp table, compressing it there if
+     * the user wants that, so that the download can then pull it out in chunks.
+     */
+    @RequiresBackgroundThread
+    private void readIntoTempTable(@NotNull AnActionEvent e, Client c, RemoteFile backup) {
+        var compressed = Edt.compute(() -> askCompress(e.getProject(), backup.getLength()));
+        var column = compressed ? "COMPRESS(BulkColumn)" : "BulkColumn";
+
+        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, %s AS f into #filedownload FROM OPENROWSET(BULK N'%s', SINGLE_BLOB) x;"
+                        .formatted(column, Sql.literal(backup.getPath())))
+                // DATALENGTH, not LEN: LEN is a character function and would stop at the first zero byte.
+                .thenCompose(x -> c.execute("update #filedownload set fs = DATALENGTH(f) where id = 1;"))
+                .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> queueDownload(e, c, backup, compressed)))
+                .exceptionally(t -> reportAndRelease(c, t));
+    }
+
+    /**
+     * Step 3, on the event thread because it opens the local save dialog. The download itself runs as a task.
+     */
+    @RequiresEdt
+    private void queueDownload(@NotNull AnActionEvent e, Client c, RemoteFile backup, boolean compressed) {
+        var target = chooseLocalFile(e, backup.getName() + (compressed ? GZIP_EXTENSION : ""));
+        if (target == null) {
+            c.release();
+            return;
+        }
+        if (compressed && !Strings.CI.endsWith(target.getAbsolutePath(), GZIP_EXTENSION)) {
+            target = new File(target.getAbsolutePath() + GZIP_EXTENSION);
+        }
+        new DownloadTask(e.getProject(), c, backup.getPath(), target).queue();
+    }
+
+    private static Void reportAndRelease(Client c, Throwable t) {
         Notifier.error("Download failed", Notifier.rootMessage(t));
         c.release();
+        return null;
     }
 
     @Nullable
-    private File getFile(@NotNull AnActionEvent e, String fileName) {
+    private File chooseLocalFile(@NotNull AnActionEvent e, String fileName) {
         var property = PropertiesComponent.getInstance(Objects.requireNonNull(e.getProject())).getValue(FileDialog.KEY_PREFIX + "download");
         var path = property == null ? null : LocalFileSystem.getInstance().findFileByPath(property);
 
