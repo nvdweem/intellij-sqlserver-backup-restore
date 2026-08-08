@@ -15,12 +15,13 @@ import dev.niels.sqlbackuprestore.Edt;
 import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
+import dev.niels.sqlbackuprestore.query.Interrupter;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta;
 import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta.BackupType;
 import dev.niels.sqlbackuprestore.query.RestoreFile;
-import dev.niels.sqlbackuprestore.query.Sql;
+import dev.niels.sqlbackuprestore.query.Statements;
 import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
 import dev.niels.sqlbackuprestore.ui.SelectBackupDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
@@ -35,27 +36,20 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.BiConsumer;
-import java.util.stream.Collectors;
-import java.util.zip.GZIPInputStream;
 
 /**
  * Restore a database from a (remote) file. Gzipped files are unpacked next to the original first.
  */
 @Slf4j
 public class Restore extends DumbAwareAction {
-    private static final String GZIP_EXTENSION = ".gzip";
 
     @Override
     public @NotNull ActionUpdateThread getActionUpdateThread() {
@@ -116,17 +110,33 @@ public class Restore extends DumbAwareAction {
     private void queueRestore(@NotNull AnActionEvent e, Client c, String database, RestoreAction toRestore) {
         // Handed to the task, which outlives this method.
         c.acquire();
-        new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
+        var interrupter = new Interrupter(c);
+
+        new ProgressTask(e.getProject(), "Restore backup", interrupter::interrupt, consumer -> {
             try {
-                new RestoreHelper(c, database, toRestore, consumer).restore()
+                interrupter.rememberSession()
+                        .thenCompose(x -> new RestoreHelper(c, database, toRestore, consumer).restore())
                         .thenRun(() -> refreshDatabaseTree(e))
                         .join();
             } catch (Exception ex) {
-                Notifier.error("Restore failed", "Unable to restore " + database, ex);
+                reportRestoreFailure(interrupter.wasInterrupted(), database, ex);
             } finally {
                 c.release();
             }
         }).queue();
+    }
+
+    /**
+     * Killing a RESTORE does not undo it. The database is left in the RESTORING state, where it is inaccessible until
+     * somebody either finishes the chain or drops it - so the notification has to say what to do about that.
+     */
+    static void reportRestoreFailure(boolean interrupted, String database, Exception ex) {
+        if (interrupted) {
+            Notifier.warning("Restore cancelled", "Restoring " + database + " was stopped part-way.\n"
+                    + "The database is left in the 'restoring' state; drop it, or restore it again to completion.");
+        } else {
+            Notifier.error("Restore failed", "Unable to restore " + database, ex);
+        }
     }
 
     /**
@@ -154,15 +164,14 @@ public class Restore extends DumbAwareAction {
         var result = new RemoteFile[files.length];
         for (var i = 0; i < files.length; i++) {
             var file = files[i];
-            if (!Strings.CI.endsWith(file.getName(), GZIP_EXTENSION)) {
+            if (!Gzip.isGzipped(file.getName())) {
                 result[i] = file;
                 continue;
             }
 
-            var unzipped = Strings.CS.appendIfMissing(Strings.CI.removeEnd(file.getPath(), GZIP_EXTENSION), ".bak");
-            try (InputStream in = new GZIPInputStream(Files.newInputStream(Path.of(file.getPath())));
-                 OutputStream out = Files.newOutputStream(Path.of(unzipped))) {
-                in.transferTo(out);
+            String unzipped;
+            try {
+                unzipped = Gzip.unpack(file.getPath());
             } catch (IOException | RuntimeException ex) {
                 log.warn("Failed to unzip {}", file.getPath(), ex);
                 Notifier.error("Unable to unpack backup", "Could not unpack " + file.getPath() + ":\n" + ex.getMessage()
@@ -179,7 +188,7 @@ public class Restore extends DumbAwareAction {
     }
 
     private static String stripBackupExtensions(String name) {
-        return Strings.CI.removeEnd(Strings.CI.removeEnd(name, GZIP_EXTENSION), ".bak");
+        return Strings.CI.removeEnd(Strings.CI.removeEnd(name, Gzip.EXTENSION), ".bak");
     }
 
     private @Nullable RestoreAction chooseBackup(@Nullable Project project, RemoteFile[] files, Client c) {
@@ -222,22 +231,7 @@ public class Restore extends DumbAwareAction {
     }
 
     private void killSessionsOn(Project project, Client c, String target) throws ExecutionException, InterruptedException {
-        c.withRows("""
-                        SELECT
-                            [Session ID]    = s.session_id,
-                            [User Process]  = CONVERT(CHAR(1), s.is_user_process),
-                            [Login]         = s.login_name,
-                            [Application]   = ISNULL(s.program_name, N''),
-                            [Open Transactions] = ISNULL(r.open_transaction_count,0),
-                            [Last Request Start Time] = s.last_request_start_time,
-                            [Host Name]     = ISNULL(s.host_name, N''),
-                            [Net Address]   = ISNULL(c.client_net_address, N'')
-                        FROM sys.dm_exec_sessions s
-                        LEFT OUTER JOIN sys.dm_exec_connections c ON (s.session_id = c.session_id)
-                        LEFT OUTER JOIN sys.dm_exec_requests r ON (s.session_id = r.session_id)
-                        WHERE s.database_id = DB_ID(N'%s')
-                          AND s.session_id <> @@SPID
-                        ORDER BY s.session_id;""".formatted(Sql.literal(target)), (cs, rs) -> {
+        c.withRows(Statements.sessionsOn(target), (cs, rs) -> {
                 })
                 .thenCompose(rows -> {
                     if (rows.isEmpty() || Messages.YES != Edt.compute(() -> Messages.showYesNoDialog(project,
@@ -251,7 +245,7 @@ public class Restore extends DumbAwareAction {
                     for (Map<String, Object> row : rows) {
                         var sessionId = row.get("Session ID");
                         // thenCompose, not thenRun: the restore has to wait for the kills to actually finish.
-                        chain = chain.thenCompose(x -> c.execute("KILL " + Integer.parseInt(Objects.toString(sessionId)))
+                        chain = chain.thenCompose(x -> c.execute(Statements.kill(Integer.parseInt(Objects.toString(sessionId))))
                                 // A session that disconnected on its own in the meantime is not a problem.
                                 .exceptionally(t -> null));
                     }
@@ -267,26 +261,10 @@ public class Restore extends DumbAwareAction {
     @AllArgsConstructor
     @Slf4j
     private static class RestoreHelper {
-        /** Everything up to and including the last separator of a {@code physical_name}. */
-        private static final String DIRECTORY_OF = """
-                LEFT(physical_name, LEN(physical_name) - (CASE
-                    WHEN CHARINDEX('\\', REVERSE(physical_name)) > CHARINDEX('/', REVERSE(physical_name))
-                    THEN CHARINDEX('\\', REVERSE(physical_name))
-                    ELSE CHARINDEX('/', REVERSE(physical_name))
-                END) + 1)""";
-
-        private static final String DEFAULT_DATA_DIRECTORY = """
-                SELECT TOP 1 %1$s AS path, COUNT(*)
-                FROM sys.master_files mf
-                INNER JOIN sys.[databases] d ON mf.[database_id] = d.[database_id]
-                GROUP BY %1$s
-                ORDER BY COUNT(*) DESC;""".formatted(DIRECTORY_OF);
-
         private final Client connection;
         private final String target;
         private final RestoreAction action;
         private final BiConsumer<MessageType, String> progressConsumer;
-        private final Map<String, Integer> uniqueNames = new HashMap<>();
         // Held as a field: every evaluation of `this::progress` would be a different object, so registering with one
         // and unregistering with another would leave the consumer behind forever.
         private final BiConsumer<MessageType, String> progressListener = this::progress;
@@ -315,39 +293,29 @@ public class Restore extends DumbAwareAction {
          * none of them, so it needs neither the file list nor the data directory.
          */
         private CompletableFuture<String> statementFor(RemoteFileWithMeta backup) {
-            var disk = "N'" + Sql.literal(backup.getFile().getPath()) + "'";
+            var path = backup.getFile().getPath();
             if (action.getType(backup) != BackupType.FULL) {
-                return CompletableFuture.completedFuture(
-                        "RESTORE DATABASE %s FROM DISK = %s WITH file = 1, NOUNLOAD, STATS = 5".formatted(Sql.quoted(target), disk));
+                return CompletableFuture.completedFuture(Statements.restoreDifferential(target, path));
             }
 
             return readFileList(backup)
-                    .thenCompose(files -> defaultDataDirectory().thenApply(directory -> assignTargets(files, directory)))
-                    .thenApply(files -> fullRestoreStatement(disk, files));
+                    .thenCompose(files -> defaultDataDirectory()
+                            .thenApply(directory -> RestoreFile.assignDefaultTargets(files, directory, target)))
+                    .thenApply(files -> fullRestoreStatement(path, files));
         }
 
         private CompletableFuture<List<RestoreFile>> readFileList(RemoteFileWithMeta backup) {
-            return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + Sql.literal(backup.getFile().getPath()) + "';")
+            return connection.getResult(Statements.fileListOnly(backup.getFile().getPath()))
                     .thenApply(RestoreFile::from);
         }
 
-        private List<RestoreFile> assignTargets(List<RestoreFile> files, String directory) {
-            files.forEach(file -> file.setRestoreAs(defaultTarget(directory, file)));
-            return files;
-        }
-
-        private String fullRestoreStatement(String disk, List<RestoreFile> files) {
+        private String fullRestoreStatement(String path, List<RestoreFile> files) {
             if (AppSettingsState.getInstance().isAskForRestoreFileLocations()) {
                 askForFileLocations(files);
             }
 
             // A differential still has to follow, so leave the database in a restoring state until it has been applied.
-            var recovery = action.differentialBackup() == null ? "" : "NORECOVERY, ";
-            var moves = files.stream()
-                    .map(file -> "MOVE N'%s' TO N'%s'".formatted(Sql.literal(file.getLogicalName()), Sql.literal(Objects.toString(file.getRestoreAs(), ""))))
-                    .collect(Collectors.joining(", "));
-            return "RESTORE DATABASE %s FROM DISK = %s WITH file = 1, %s, %s NOUNLOAD, STATS = 5, REPLACE"
-                    .formatted(Sql.quoted(target), disk, moves, recovery);
+            return Statements.restoreFull(target, path, files, action.differentialBackup() != null);
         }
 
         private void askForFileLocations(List<RestoreFile> files) {
@@ -358,27 +326,8 @@ public class Restore extends DumbAwareAction {
             });
         }
 
-        private String defaultTarget(String directory, RestoreFile file) {
-            var extension = file.isLog() ? "_log.ldf" : ".mdf";
-            // The server may well be running on Linux, so follow the separator the server itself uses.
-            var separator = StringUtils.contains(directory, '/') ? "/" : "\\";
-            return StringUtils.stripEnd(directory, "/\\") + separator + uniqueName(extension);
-        }
-
-        /**
-         * A backup with more than one data file would otherwise restore every one of them to {@code <database>.mdf}.
-         */
-        private String uniqueName(String extension) {
-            var count = uniqueNames.compute(target + extension, (k, v) -> v == null ? 0 : v + 1);
-            return count == 0 ? target + extension : target + "_" + count + extension;
-        }
-
-        /**
-         * Where to put the restored data files: the directory that already holds most of this server's database files.
-         * The server may well be running on Linux, hence the two separators.
-         */
         private CompletableFuture<String> defaultDataDirectory() {
-            return connection.getSingle(DEFAULT_DATA_DIRECTORY, "path", String.class);
+            return connection.getSingle(Statements.DEFAULT_DATA_DIRECTORY, "path", String.class);
         }
 
         private void progress(MessageType messageType, String warning) {

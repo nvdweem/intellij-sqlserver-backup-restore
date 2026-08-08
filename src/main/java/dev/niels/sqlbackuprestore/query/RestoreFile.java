@@ -1,11 +1,13 @@
 package dev.niels.sqlbackuprestore.query;
 
+import dev.niels.sqlbackuprestore.ServerPath;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -36,6 +38,24 @@ public class RestoreFile {
 
     public boolean isLog() {
         return Strings.CI.equals(type, "L");
+    }
+
+    /**
+     * Points every file at {@code directory}, named after the database it is being restored as. A backup containing
+     * more than one data file would otherwise restore all of them to {@code <database>.mdf} - the second MOVE silently
+     * overwriting the first.
+     *
+     * @return the same list, for chaining.
+     */
+    public static @NotNull List<RestoreFile> assignDefaultTargets(@NotNull List<RestoreFile> files, @NotNull String directory, @NotNull String database) {
+        var used = new HashMap<String, Integer>();
+        for (var file : files) {
+            var extension = file.isLog() ? "_log.ldf" : ".mdf";
+            var count = used.compute(extension, (k, v) -> v == null ? 0 : v + 1);
+            var name = count == 0 ? database + extension : database + "_" + count + extension;
+            file.setRestoreAs(ServerPath.join(directory, name));
+        }
+        return files;
     }
 
     private static String column(Map<String, Object> row, String name) {

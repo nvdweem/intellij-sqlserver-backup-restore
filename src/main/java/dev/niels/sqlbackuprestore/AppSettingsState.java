@@ -20,6 +20,8 @@ public class AppSettingsState implements PersistentStateComponent<AppSettingsSta
     private boolean useDbNameOnDownload = false;
     private boolean askForRestoreFileLocations = false;
     private boolean enableDownloadOption = false;
+    /** Whether the restore picker hides files that don't look like a backup. */
+    private boolean onlyShowBackupFiles = true;
 
     public static AppSettingsState getInstance() {
         return ApplicationManager.getApplication().getService(AppSettingsState.class);

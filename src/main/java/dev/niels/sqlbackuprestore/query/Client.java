@@ -32,6 +32,8 @@ import java.util.function.BiConsumer;
 public class Client {
     private final DatabaseSessionClient dbClient;
     private final Auditor auditor;
+    private final Project project;
+    private final LocalDataSource dataSource;
     @Getter
     private final String dbName;
     // Acquired/released from the EDT, from background tasks and from the database thread that completes a query.
@@ -39,10 +41,20 @@ public class Client {
     private final AtomicBoolean disconnected = new AtomicBoolean(false);
 
     public Client(Project project, LocalDataSource dataSource) {
+        this.project = project;
+        this.dataSource = dataSource;
         dbClient = DatabaseSessionManager.getFacade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
         dbName = dataSource.getName();
         auditor = new Auditor();
         dbClient.getMessageBus().addAuditor(auditor);
+    }
+
+    /**
+     * A second, independent session on the same server. Needed for the one thing that cannot be done over this
+     * connection: interrupting whatever this connection is currently busy with.
+     */
+    Client newSession() {
+        return new Client(project, dataSource);
     }
 
     public void setTitle(String title) {

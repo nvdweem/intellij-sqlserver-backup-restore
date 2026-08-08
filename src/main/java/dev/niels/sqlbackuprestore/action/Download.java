@@ -19,9 +19,10 @@ import com.intellij.util.concurrency.annotations.RequiresEdt;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Edt;
 import dev.niels.sqlbackuprestore.Notifier;
+import dev.niels.sqlbackuprestore.query.ChunkPlan;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
-import dev.niels.sqlbackuprestore.query.Sql;
+import dev.niels.sqlbackuprestore.query.Statements;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
@@ -85,12 +86,9 @@ public class Download extends DumbAwareAction {
     @RequiresBackgroundThread
     private void readIntoTempTable(@NotNull AnActionEvent e, Client c, RemoteFile backup) {
         var compressed = Edt.compute(() -> askCompress(e.getProject(), backup.getLength()));
-        var column = compressed ? "COMPRESS(BulkColumn)" : "BulkColumn";
 
-        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, %s AS f into #filedownload FROM OPENROWSET(BULK N'%s', SINGLE_BLOB) x;"
-                        .formatted(column, Sql.literal(backup.getPath())))
-                // DATALENGTH, not LEN: LEN is a character function and would stop at the first zero byte.
-                .thenCompose(x -> c.execute("update #filedownload set fs = DATALENGTH(f) where id = 1;"))
+        c.execute(Statements.stageForDownload(backup.getPath(), compressed))
+                .thenCompose(x -> c.execute(Statements.measureStagedLength()))
                 .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> queueDownload(e, c, backup, compressed)))
                 .exceptionally(t -> reportAndRelease(c, t));
     }
@@ -183,7 +181,7 @@ public class Download extends DumbAwareAction {
                     indicator.setIndeterminate(false);
                     indicator.setFraction(0.0);
 
-                    connection.getSingle("SELECT fs FROM #filedownload", "fs", Long.class)
+                    connection.getSingle(Statements.STAGED_LENGTH, "fs", Long.class)
                             .thenCompose(s -> download(indicator, fos, s))
                             .join();
                 } finally {
@@ -202,7 +200,7 @@ public class Download extends DumbAwareAction {
          */
         private void dropTempTable() {
             try {
-                connection.execute("IF OBJECT_ID('tempdb..#filedownload') IS NOT NULL DROP TABLE #filedownload;").join();
+                connection.execute(Statements.DROP_STAGED_DOWNLOAD).join();
             } catch (Exception e) {
                 log.warn("Unable to drop the temporary download table", e);
             }
@@ -213,38 +211,30 @@ public class Download extends DumbAwareAction {
          * file never has to be held in memory in one piece, at either end.
          */
         private CompletableFuture<?> download(@NotNull ProgressIndicator indicator, FileOutputStream fos, long totalBytes) {
-            // A hundred chunks, so the progress bar moves, unless that would make them smaller than a megabyte.
-            var chunkSize = Math.max(1_000_000, (long) Math.ceil(totalBytes / 100d));
-            var chunks = (long) Math.ceil((double) totalBytes / chunkSize);
+            var plan = ChunkPlan.of(totalBytes);
 
             CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
             var failed = new AtomicBoolean(false);
-            for (var i = 0L; i < chunks; i++) {
+            for (var i = 0L; i < plan.count(); i++) {
                 var chunk = i;
                 chain = chain.thenCompose(x -> {
                     if (failed.get() || indicator.isCanceled()) {
                         return CompletableFuture.completedFuture(null);
                     }
-                    return downloadChunk(indicator, fos, totalBytes, chunkSize, chunks, chunk, failed);
+                    return downloadChunk(indicator, fos, plan, chunk, failed);
                 });
             }
             return chain;
         }
 
-        private CompletableFuture<?> downloadChunk(ProgressIndicator indicator, FileOutputStream fos, long totalBytes,
-                                                   long chunkSize, long chunks, long chunk, AtomicBoolean failed) {
-            // SUBSTRING is 1-based in T-SQL. Starting at `chunk * chunkSize` made the first chunk a byte short, and
-            // every later one inherited the offset, so a file whose size was an exact multiple of the chunk size lost
-            // its last byte.
-            var offset = chunk * chunkSize + 1;
-
-            return connection.withRows("select substring(f, %s, %s) AS part from #filedownload".formatted(offset, chunkSize), (columns, rows) -> {
+        private CompletableFuture<?> downloadChunk(ProgressIndicator indicator, FileOutputStream fos, ChunkPlan plan, long chunk, AtomicBoolean failed) {
+            return connection.withRows(Statements.downloadChunk(plan.offsetOf(chunk), plan.chunkSize()), (columns, rows) -> {
                 try {
                     write(fos, rows.getFirst().getValue(0));
-                    indicator.setFraction((double) chunk / chunks);
+                    indicator.setFraction(plan.fractionAt(chunk));
                     indicator.setText("%s: %s/%s".formatted(getTitle(),
-                            Util.humanReadableByteCountSI(Math.min(totalBytes, (chunk + 1) * chunkSize)),
-                            Util.humanReadableByteCountSI(totalBytes)));
+                            Util.humanReadableByteCountSI(plan.bytesThrough(chunk)),
+                            Util.humanReadableByteCountSI(plan.totalBytes())));
                 } catch (Exception e) {
                     Notifier.error("Unable to write", "Unable to write to " + target, e);
                     failed.set(true);

@@ -1,7 +1,6 @@
 package dev.niels.sqlbackuprestore.query;
 
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
-import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
@@ -11,8 +10,8 @@ import java.util.Objects;
 import java.util.function.Function;
 
 @Data
-// Lets the header-matching rules be exercised without a live server behind them.
-@AllArgsConstructor(access = AccessLevel.PACKAGE)
+// Lets the header-matching rules, and the dialog that presents them, be exercised without a live server behind them.
+@AllArgsConstructor
 public class RemoteFileWithMeta {
     private final RemoteFile file;
     private final BackupType type;
@@ -30,7 +29,7 @@ public class RemoteFileWithMeta {
     }
 
     public RemoteFileWithMeta(Client c, RemoteFile file) {
-        var result = c.withRows("RESTORE HEADERONLY FROM DISK = N'" + Sql.literal(file.getPath()) + "' WITH NOUNLOAD;", (cs, rs) -> {
+        var result = c.withRows(Statements.headerOnly(file.getPath()), (cs, rs) -> {
         }).join();
 
         if (result.isEmpty()) {

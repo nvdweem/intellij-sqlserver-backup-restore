@@ -29,6 +29,10 @@ public final class Notifier {
         notify(NotificationType.WARNING, title, content);
     }
 
+    public static void information(@NotNull String title, @NotNull String content) {
+        notify(NotificationType.INFORMATION, title, content);
+    }
+
     /**
      * The message of the first exception in the chain that has one of its own. Futures hand back a
      * {@link java.util.concurrent.CompletionException} wrapping the real failure, and showing its message would tell

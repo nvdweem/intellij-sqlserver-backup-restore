@@ -23,7 +23,7 @@ public class SelectBackupDialog extends DialogWrapper {
     private final Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithDifferentials;
     @Getter private @Nullable RestoreAction result;
 
-    private SelectBackupDialog(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithDifferentials) {
+    SelectBackupDialog(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithDifferentials) {
         super(project);
         this.fullsWithDifferentials = fullsWithDifferentials;
 

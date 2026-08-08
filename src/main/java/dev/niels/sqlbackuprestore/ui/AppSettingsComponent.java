@@ -22,6 +22,7 @@ public class AppSettingsComponent {
     private final JBCheckBox useDbNameOnDownload = new JBCheckBox("Use DB name on backup and download");
     private final JBCheckBox askForRestoreFileLocations = new JBCheckBox("Ask for file locations when restoring");
     private final JBCheckBox enableDownloadOption = new JBCheckBox("Enable 'Backup and Download' option");
+    private final JBCheckBox onlyShowBackupFiles = new JBCheckBox("Only show backup files when restoring");
 
     public AppSettingsComponent() {
         mainPanel = FormBuilder.createFormBuilder()
@@ -39,6 +40,9 @@ public class AppSettingsComponent {
                 .addVerticalGap(1)
                 .addComponent(enableDownloadOption)
                 .addComponent(new JBLabel("Can be used to download a backup from a remote database, not very useful for local database servers", ComponentStyle.SMALL, FontColor.BRIGHTER))
+                .addVerticalGap(1)
+                .addComponent(onlyShowBackupFiles)
+                .addComponent(new JBLabel("Hides everything that isn't a .bak, .trn, .dif or .gzip. Turn off if your backups are named differently.", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
     }
@@ -50,6 +54,7 @@ public class AppSettingsComponent {
         modified |= useDbNameOnDownload.isSelected() != current.isUseDbNameOnDownload();
         modified |= askForRestoreFileLocations.isSelected() != current.isAskForRestoreFileLocations();
         modified |= enableDownloadOption.isSelected() != current.isEnableDownloadOption();
+        modified |= onlyShowBackupFiles.isSelected() != current.isOnlyShowBackupFiles();
         return modified;
     }
 
@@ -77,6 +82,7 @@ public class AppSettingsComponent {
         current.setUseDbNameOnDownload(useDbNameOnDownload.isSelected());
         current.setAskForRestoreFileLocations(askForRestoreFileLocations.isSelected());
         current.setEnableDownloadOption(enableDownloadOption.isSelected());
+        current.setOnlyShowBackupFiles(onlyShowBackupFiles.isSelected());
     }
 
     public void reset() {
@@ -86,5 +92,7 @@ public class AppSettingsComponent {
         useDbNameOnDownload.setSelected(current.isUseDbNameOnDownload());
         askForRestoreFileLocations.setSelected(current.isAskForRestoreFileLocations());
         enableDownloadOption.setSelected(current.isEnableDownloadOption());
+        onlyShowBackupFiles.setSelected(current.isOnlyShowBackupFiles());
     }
+
 }
