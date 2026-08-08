@@ -17,13 +17,13 @@ import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta;
 import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta.BackupType;
+import dev.niels.sqlbackuprestore.query.RestoreFile;
 import dev.niels.sqlbackuprestore.query.Sql;
 import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
 import dev.niels.sqlbackuprestore.ui.SelectBackupDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.AllArgsConstructor;
-import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import one.util.streamex.StreamEx;
 import org.apache.commons.lang3.ArrayUtils;
@@ -282,49 +282,57 @@ public class Restore extends DumbAwareAction {
         // and unregistering with another would leave the consumer behind forever.
         private final BiConsumer<MessageType, String> progressListener = this::progress;
 
-        public CompletableFuture<Void> restore() {
-            var temp = new RestoreTemp();
-            CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
-            for (var file : action.getFiles().toList()) {
+        public CompletableFuture<?> restore() {
+            // Registered once for the whole run. Registering per statement (which is what chaining it onto each
+            // execute did) left one registration behind for every file after the first.
+            connection.addWarningConsumer(progressListener);
+
+            CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
+            for (var backup : action.getFiles().toList()) {
                 // Each step depends on the previous one having succeeded: restoring the differential on top of a full
                 // backup that failed would only produce a second, more confusing error.
-                chain = chain
-                        .thenCompose(x -> connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + Sql.literal(file.getFile().getPath()) + "';"))
-                        .thenApply(temp::setFiles)
-                        .thenCompose(x -> defaultDataDirectory())
-                        .thenApply(temp::setLocation)
-                        .thenAccept(this::defaultFileNames)
-                        .thenApply(v -> determineRestoreQuery(file, temp))
-                        .thenCompose(sql -> connection.addWarningConsumer(progressListener).execute(sql))
-                        .thenAccept(x -> {
-                        });
+                chain = chain.thenCompose(x -> restoreOne(backup));
             }
             return chain.whenComplete((x, error) -> connection.removeWarningConsumer(progressListener));
         }
 
-        private String determineRestoreQuery(RemoteFileWithMeta file, RestoreTemp temp) {
-            var disk = "N'" + Sql.literal(file.getFile().getPath()) + "'";
-            if (action.getType(file) != BackupType.FULL) {
-                return String.format("RESTORE DATABASE %s FROM DISK = %s WITH file = 1, NOUNLOAD, STATS = 5", Sql.quoted(target), disk);
+        private CompletableFuture<?> restoreOne(RemoteFileWithMeta backup) {
+            return readFileList(backup)
+                    .thenCompose(files -> defaultDataDirectory().thenApply(directory -> assignTargets(files, directory)))
+                    .thenApply(files -> restoreStatement(backup, files))
+                    .thenCompose(connection::execute);
+        }
+
+        private CompletableFuture<List<RestoreFile>> readFileList(RemoteFileWithMeta backup) {
+            return connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + Sql.literal(backup.getFile().getPath()) + "';")
+                    .thenApply(RestoreFile::from);
+        }
+
+        private List<RestoreFile> assignTargets(List<RestoreFile> files, String directory) {
+            files.forEach(file -> file.setRestoreAs(defaultTarget(directory, file)));
+            return files;
+        }
+
+        private String restoreStatement(RemoteFileWithMeta backup, List<RestoreFile> files) {
+            var disk = "N'" + Sql.literal(backup.getFile().getPath()) + "'";
+            if (action.getType(backup) != BackupType.FULL) {
+                return "RESTORE DATABASE %s FROM DISK = %s WITH file = 1, NOUNLOAD, STATS = 5".formatted(Sql.quoted(target), disk);
             }
 
             if (AppSettingsState.getInstance().isAskForRestoreFileLocations()) {
-                askForFileLocations(temp);
+                askForFileLocations(files);
             }
 
             // A differential still has to follow, so leave the database in a restoring state until it has been applied.
             var recovery = action.differentialBackup() == null ? "" : "NORECOVERY, ";
-            var moves = temp.getFiles().stream()
-                    .map(s -> String.format("MOVE N'%s' TO N'%s'", Sql.literal(Objects.toString(s.get("LogicalName"), "")), Sql.literal(Objects.toString(s.get("RestoreAs"), ""))))
+            var moves = files.stream()
+                    .map(file -> "MOVE N'%s' TO N'%s'".formatted(Sql.literal(file.getLogicalName()), Sql.literal(Objects.toString(file.getRestoreAs(), ""))))
                     .collect(Collectors.joining(", "));
-            return String.format("RESTORE DATABASE %s FROM DISK = %s WITH file = 1, %s, %s NOUNLOAD, STATS = 5, REPLACE", Sql.quoted(target), disk, moves, recovery);
+            return "RESTORE DATABASE %s FROM DISK = %s WITH file = 1, %s, %s NOUNLOAD, STATS = 5, REPLACE"
+                    .formatted(Sql.quoted(target), disk, moves, recovery);
         }
 
-        private void defaultFileNames(RestoreTemp temp) {
-            temp.getFiles().forEach(v -> v.put("RestoreAs", determineFileName(temp.getLocation(), v)));
-        }
-
-        private void askForFileLocations(RestoreTemp files) {
+        private void askForFileLocations(List<RestoreFile> files) {
             ApplicationManager.getApplication().invokeAndWait(() -> {
                 if (!new RestoreFilenamesDialog(null, files).showAndGet()) {
                     throw new CancellationException("Restore cancelled");
@@ -332,20 +340,19 @@ public class Restore extends DumbAwareAction {
             });
         }
 
-        private String determineFileName(String path, Map<String, Object> values) {
-            var type = (String) values.get("Type");
-            var ext = Strings.CI.equals(type, "L") ? "_log.ldf" : ".mdf";
+        private String defaultTarget(String directory, RestoreFile file) {
+            var extension = file.isLog() ? "_log.ldf" : ".mdf";
             // The server may well be running on Linux, so follow the separator the server itself uses.
-            var separator = StringUtils.contains(path, '/') ? "/" : "\\";
-            return StringUtils.stripEnd(path, "/\\") + separator + uniqueName(target, ext);
+            var separator = StringUtils.contains(directory, '/') ? "/" : "\\";
+            return StringUtils.stripEnd(directory, "/\\") + separator + uniqueName(extension);
         }
 
-        private String uniqueName(String target, String ext) {
-            int count = uniqueNames.compute(target + ext, (k, v) -> v == null ? 0 : v + 1);
-            if (count == 0) {
-                return target + ext;
-            }
-            return target + "_" + count + ext;
+        /**
+         * A backup with more than one data file would otherwise restore every one of them to {@code <database>.mdf}.
+         */
+        private String uniqueName(String extension) {
+            var count = uniqueNames.compute(target + extension, (k, v) -> v == null ? 0 : v + 1);
+            return count == 0 ? target + extension : target + "_" + count + extension;
         }
 
         /**
@@ -371,12 +378,6 @@ public class Restore extends DumbAwareAction {
         CancellationException(String message) {
             super(message);
         }
-    }
-
-    @Data
-    public static class RestoreTemp {
-        private List<Map<String, Object>> files;
-        private String location;
     }
 
     public record RestoreAction(@NotNull RemoteFileWithMeta fullBackup, @Nullable RemoteFileWithMeta differentialBackup) {

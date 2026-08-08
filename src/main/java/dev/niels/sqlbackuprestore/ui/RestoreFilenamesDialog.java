@@ -5,25 +5,26 @@ import com.intellij.openapi.ui.DialogWrapper;
 import com.intellij.openapi.ui.ValidationInfo;
 import com.intellij.ui.components.JBScrollPane;
 import com.intellij.ui.table.JBTable;
-import dev.niels.sqlbackuprestore.action.Restore.RestoreTemp;
-import one.util.streamex.StreamEx;
+import dev.niels.sqlbackuprestore.query.RestoreFile;
 import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JComponent;
 import javax.swing.table.DefaultTableModel;
 
+import java.util.List;
+
 public class RestoreFilenamesDialog extends DialogWrapper {
     private static final int LOGICAL_NAME_COLUMN = 0;
     private static final int RESTORE_AS_COLUMN = 3;
 
-    private final RestoreTemp temp;
+    private final List<RestoreFile> files;
     private DefaultTableModel model;
     private JBTable table;
 
-    public RestoreFilenamesDialog(@Nullable Project project, RestoreTemp temp) {
+    public RestoreFilenamesDialog(@Nullable Project project, List<RestoreFile> files) {
         super(project);
-        this.temp = temp;
+        this.files = files;
 
         init();
         setTitle("Files");
@@ -38,14 +39,11 @@ public class RestoreFilenamesDialog extends DialogWrapper {
 
             @Override public void setValueAt(Object aValue, int row, int column) {
                 super.setValueAt(aValue, row, column);
-                temp.getFiles().get(row).put("RestoreAs", asString(aValue));
+                files.get(row).setRestoreAs(asString(aValue));
             }
         };
-        StreamEx.of(temp.getFiles()).map(f -> new String[]{
-                        asString(f.get("LogicalName")),
-                        asString(f.get("Type")),
-                        asString(f.get("PhysicalName")),
-                        asString(f.get("RestoreAs"))})
+        files.stream()
+                .map(f -> new String[]{f.getLogicalName(), f.getType(), f.getPhysicalName(), asString(f.getRestoreAs())})
                 .forEach(model::addRow);
         table = new JBTable(model);
         table.getColumnModel().getColumn(0).setPreferredWidth(120);
