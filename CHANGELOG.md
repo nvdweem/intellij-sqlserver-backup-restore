@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- Backups and restores can be cancelled while they run, and report their progress percentage
+- Selecting several databases now backs all of them up, into a folder you pick, as `<database>.bak`
+- The file picker shows each file's size and modification date, and hides everything that isn't a backup (can be turned off in settings)
+
+### Fixed
+
 - Fixed downloaded backups losing their last byte when the file size was an exact multiple of the chunk size
 - Fixed failed backups and restores being reported as successful
 - Fixed the restore dialog restoring a different backup than the one selected, and cancelling it acting like OK
@@ -14,7 +22,9 @@
 - Restore file locations are now validated, and the last edited cell is no longer lost when confirming
 - Restore now follows the server's own path separator instead of assuming Windows
 - Notifications are registered properly, so they can be configured from Settings | Notifications
-- Added unit tests and wired `test`/`verifyPlugin` into CI
+- Added tests and wired `test`/`verifyPlugin` into CI. Every statement the plugin sends now lives in one place and is
+  checked against a real SQL Server where one is available, alongside unit tests and a set that boots a headless IDE to
+  check what `plugin.xml` registers. See the README for how to run them
 
 ## 1.0.10 - 2026-07-17
 
