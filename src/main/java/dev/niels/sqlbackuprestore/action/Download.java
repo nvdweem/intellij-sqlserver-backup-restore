@@ -3,9 +3,6 @@ package dev.niels.sqlbackuprestore.action;
 import com.intellij.database.model.DasObject;
 import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.ide.util.PropertiesComponent;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
@@ -17,11 +14,17 @@ import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
+import com.intellij.util.concurrency.annotations.RequiresBackgroundThread;
+import com.intellij.util.concurrency.annotations.RequiresEdt;
 import dev.niels.sqlbackuprestore.AppSettingsState;
-import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.Edt;
+import dev.niels.sqlbackuprestore.Notifier;
+import dev.niels.sqlbackuprestore.query.ChunkPlan;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
+import dev.niels.sqlbackuprestore.query.Statements;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
+import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
@@ -37,9 +40,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Triggers backup and then allows downloading the result
+ * Backs the database up to a file on the server, then pulls that file down to the local machine in chunks.
  */
 public class Download extends DumbAwareAction {
+    private static final String GZIP_EXTENSION = ".gzip";
+
     @Override
     public @NotNull ActionUpdateThread getActionUpdateThread() {
         return ActionUpdateThread.BGT;
@@ -47,46 +52,77 @@ public class Download extends DumbAwareAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-        try (var c = QueryHelper.client(e)) {
-            c.open();
-
-            ApplicationManager.getApplication().invokeLater(() ->
-                    new Backup().backup(e, c).thenAcceptAsync(source -> {
-                        if (source == null) {
-                            c.close();
-                            return;
-                        }
-
-                        AtomicBoolean compressed = new AtomicBoolean(false);
-                        ApplicationManager.getApplication().invokeAndWait(() -> compressed.set(askCompress(e.getProject(), source.getLength())));
-                        var col = compressed.get() ? "COMPRESS(BulkColumn)" : "BulkColumn";
-
-                        c.execute("SELECT 1 as id, CAST(0 as bigint) AS fs, " + col + " AS f into #filedownload FROM OPENROWSET(BULK N'" + source.getPath() + "', SINGLE_BLOB) x;")
-                                .thenCompose(x -> c.execute("update #filedownload set fs = LEN(f) where id = 1;"))
-                                .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> {
-                                    var name = source.getName() + (compressed.get() ? ".gzip" : "");
-                                    var target = getFile(e, name);
-                                    if (target == null) {
-                                        c.close();
-                                        return;
-                                    }
-                                    if (compressed.get() && !Strings.CI.endsWith(target.getAbsolutePath(), ".gzip")) {
-                                        target = new File(target.getAbsolutePath() + ".gzip");
-                                    }
-                                    new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
-                                }));
-                    })
-            );
+        var c = QueryHelper.client(e);
+        try {
+            // Held for the asynchronous flow below, which outlives this method. Every path through it releases once.
+            c.acquire();
+            ApplicationManager.getApplication().invokeLater(() -> takeBackup(e, c));
+        } finally {
+            c.release();
         }
     }
 
+    /**
+     * Step 1, on the event thread because it opens the "where on the server" dialog.
+     */
+    @RequiresEdt
+    private void takeBackup(@NotNull AnActionEvent e, Client c) {
+        new Backup().backup(e, c)
+                .thenAcceptAsync(backup -> {
+                    if (backup == null) {
+                        c.release(); // No file was chosen, so nothing was backed up.
+                    } else {
+                        readIntoTempTable(e, c, backup);
+                    }
+                })
+                // Without this a backup that failed would never release the session it holds.
+                .exceptionally(t -> reportAndRelease(c, t));
+    }
+
+    /**
+     * Step 2, off the event thread: the server reads its own backup file into a temp table, compressing it there if
+     * the user wants that, so that the download can then pull it out in chunks.
+     */
+    @RequiresBackgroundThread
+    private void readIntoTempTable(@NotNull AnActionEvent e, Client c, RemoteFile backup) {
+        var compressed = Edt.compute(() -> askCompress(e.getProject(), backup.getLength()));
+
+        c.execute(Statements.stageForDownload(backup.getPath(), compressed))
+                .thenCompose(x -> c.execute(Statements.measureStagedLength()))
+                .thenRun(() -> ApplicationManager.getApplication().invokeLater(() -> queueDownload(e, c, backup, compressed)))
+                .exceptionally(t -> reportAndRelease(c, t));
+    }
+
+    /**
+     * Step 3, on the event thread because it opens the local save dialog. The download itself runs as a task.
+     */
+    @RequiresEdt
+    private void queueDownload(@NotNull AnActionEvent e, Client c, RemoteFile backup, boolean compressed) {
+        var target = chooseLocalFile(e, backup.getName() + (compressed ? GZIP_EXTENSION : ""));
+        if (target == null) {
+            c.release();
+            return;
+        }
+        if (compressed && !Strings.CI.endsWith(target.getAbsolutePath(), GZIP_EXTENSION)) {
+            target = new File(target.getAbsolutePath() + GZIP_EXTENSION);
+        }
+        new DownloadTask(e.getProject(), c, backup.getPath(), target).queue();
+    }
+
+    private static Void reportAndRelease(Client c, Throwable t) {
+        Notifier.error("Download failed", Notifier.rootMessage(t));
+        c.release();
+        return null;
+    }
+
     @Nullable
-    private File getFile(@NotNull AnActionEvent e, String fileName) {
+    private File chooseLocalFile(@NotNull AnActionEvent e, String fileName) {
         var property = PropertiesComponent.getInstance(Objects.requireNonNull(e.getProject())).getValue(FileDialog.KEY_PREFIX + "download");
         var path = property == null ? null : LocalFileSystem.getInstance().findFileByPath(property);
 
         if (AppSettingsState.getInstance().isUseDbNameOnDownload()) {
-            fileName = QueryHelper.getDatabase(e).map(DasObject::getName).orElse(null) + ".bak";
+            // Fall back to the backup's own name rather than proposing a file literally called "null.bak".
+            fileName = QueryHelper.getDatabase(e).map(DasObject::getName).map(name -> name + ".bak").orElse(fileName);
         }
         var wrapper = FileChooserFactory.getInstance().createSaveFileDialog(new FileSaverDescriptor("Choose Local File", "Where to store the downloaded file"), e.getProject()).save(path, fileName);
         if (wrapper == null) {
@@ -94,7 +130,8 @@ public class Download extends DumbAwareAction {
         }
 
         var result = wrapper.getFile();
-        PropertiesComponent.getInstance(e.getProject()).getValue(FileDialog.KEY_PREFIX + "download", result.getParent());
+        // setValue, not getValue: reading it back here meant the chosen directory was never actually remembered.
+        PropertiesComponent.getInstance(e.getProject()).setValue(FileDialog.KEY_PREFIX + "download", result.getParent());
         return result;
     }
 
@@ -137,56 +174,77 @@ public class Download extends DumbAwareAction {
 
         @Override
         public void run(@NotNull ProgressIndicator indicator) {
-            try (var fos = new FileOutputStream(target)) {
-                indicator.setIndeterminate(false);
-                indicator.setFraction(0.0);
+            try {
+                // The stream has to be closed before cleanIfCancelled runs: Windows refuses to delete an open file,
+                // so a cancelled download used to leave a half-written .bak behind.
+                try (var fos = new FileOutputStream(target)) {
+                    indicator.setIndeterminate(false);
+                    indicator.setFraction(0.0);
 
-                connection.getSingle("SELECT fs FROM #filedownload", "fs", Long.class)
-                        .thenCompose(s -> download(indicator, fos, s))
-                        .exceptionally(connection::close)
-                        .thenRun(connection::close)
-                        .thenRun(() -> cleanIfCancelled(indicator))
-                        .get();
+                    connection.getSingle(Statements.STAGED_LENGTH, "fs", Long.class)
+                            .thenCompose(s -> download(indicator, fos, s))
+                            .join();
+                } finally {
+                    dropTempTable();
+                    // Exactly once: the old exceptionally(close).thenRun(close) pair closed twice on failure.
+                    connection.release();
+                }
+                cleanIfCancelled(indicator);
             } catch (Exception e) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
+                Notifier.error("Unable to write", "Unable to write to " + path, e);
             }
         }
 
-        private CompletableFuture<?> download(@NotNull ProgressIndicator indicator, FileOutputStream fos, Long s) {
-            // Split into 100 parts unless the parts are smaller than 1MB
-            var part = Math.max(1_000_000, (long) Math.ceil(s / 100d));
-            var parts = Math.ceil((double) s / part);
+        /**
+         * The blob is staged in a temp table that would otherwise sit in tempdb for as long as the session lives.
+         */
+        private void dropTempTable() {
+            try {
+                connection.execute(Statements.DROP_STAGED_DOWNLOAD).join();
+            } catch (Exception e) {
+                log.warn("Unable to drop the temporary download table", e);
+            }
+        }
+
+        /**
+         * Pulls the staged blob down one chunk at a time, sequentially - the whole point of the temp table is that the
+         * file never has to be held in memory in one piece, at either end.
+         */
+        private CompletableFuture<?> download(@NotNull ProgressIndicator indicator, FileOutputStream fos, long totalBytes) {
+            var plan = ChunkPlan.of(totalBytes);
 
             CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
-
-            // Build a chain of part downloads that are executed sequentially
-            AtomicBoolean error = new AtomicBoolean(false);
-            for (var i = 0; i < parts; i++) {
-                var current = i;
+            var failed = new AtomicBoolean(false);
+            for (var i = 0L; i < plan.count(); i++) {
+                var chunk = i;
                 chain = chain.thenCompose(x -> {
-                    // Allow cancelling and don't proceed if there was an error
-                    if (error.get() || indicator.isCanceled()) {
+                    if (failed.get() || indicator.isCanceled()) {
                         return CompletableFuture.completedFuture(null);
                     }
-
-                    // Get the next part and store it
-                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part, part), (cols, rows) -> {
-                        try {
-                            write(fos, rows.getFirst().getValue(0));
-                            indicator.setFraction(current / parts);
-                            indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
-                        } catch (Exception e) {
-                            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + target + ":\n" + e.getMessage(), NotificationType.ERROR));
-                            error.set(true);
-                        }
-                    });
+                    return downloadChunk(indicator, fos, plan, chunk, failed);
                 });
             }
             return chain;
         }
 
+        private CompletableFuture<?> downloadChunk(ProgressIndicator indicator, FileOutputStream fos, ChunkPlan plan, long chunk, AtomicBoolean failed) {
+            return connection.withRows(Statements.downloadChunk(plan.offsetOf(chunk), plan.chunkSize()), (columns, rows) -> {
+                try {
+                    write(fos, rows.getFirst().getValue(0));
+                    indicator.setFraction(plan.fractionAt(chunk));
+                    indicator.setText("%s: %s/%s".formatted(getTitle(),
+                            Util.humanReadableByteCountSI(plan.bytesThrough(chunk)),
+                            Util.humanReadableByteCountSI(plan.totalBytes())));
+                } catch (Exception e) {
+                    Notifier.error("Unable to write", "Unable to write to " + target, e);
+                    failed.set(true);
+                }
+            });
+        }
+
         /**
-         * Write a single part to the file stream
+         * Which type the driver hands back for the blob column depends on how it decided to fetch it, so all three
+         * possibilities are handled rather than guessed at.
          */
         private void write(FileOutputStream fos, Object blob) throws IOException, SQLException {
             switch (blob) {
@@ -197,28 +255,22 @@ public class Download extends DumbAwareAction {
             }
         }
 
-        /**
-         * Check if the indicator was cancelled, if so delete the target file.
-         */
         private void cleanIfCancelled(ProgressIndicator indicator) {
             if (indicator.isCanceled()) {
                 try {
                     Files.delete(target.toPath());
                 } catch (IOException e) {
-                    Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Delete failure", "Unable to delete " + path + " after cancel:\n" + e.getMessage(), NotificationType.WARNING));
+                    Notifier.warning("Delete failure", "Unable to delete " + path + " after cancel:\n" + e.getMessage());
                 }
             }
         }
 
-        /**
-         * Write byte array to file
-         */
         private void saveBlob(FileOutputStream fos, byte[] blob) throws IOException {
             fos.write(blob);
         }
 
         /**
-         * Write RemoteBlob to file
+         * A blob that stayed on the server is read in pieces of its own; {@link RemoteBlob#getBytes} counts from 1.
          */
         private void saveBlob(FileOutputStream fos, RemoteBlob blob) throws IOException, SQLException {
             long position = 1;
@@ -230,9 +282,6 @@ public class Download extends DumbAwareAction {
             }
         }
 
-        /**
-         * Write string to file
-         */
         private void saveBlob(FileOutputStream fos, String blob) throws IOException {
             saveBlob(fos, blob.getBytes());
         }

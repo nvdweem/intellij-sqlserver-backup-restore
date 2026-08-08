@@ -1,18 +1,31 @@
 package dev.niels.sqlbackuprestore.action;
 
+import java.text.CharacterIterator;
+import java.text.StringCharacterIterator;
+
 public class Util {
     private Util() {
     }
 
-    public static String humanReadableByteCountSI(long bytes) {  // NOSONAR
-        String s = bytes < 0 ? "-" : ""; // NOSONAR
-        long b = bytes == Long.MIN_VALUE ? Long.MAX_VALUE : Math.abs(bytes); // NOSONAR
-        return b < 1000L ? bytes + " B" // NOSONAR
-                : b < 999_950L ? String.format("%s%.1f kB", s, b / 1e3) // NOSONAR
-                : (b /= 1000) < 999_950L ? String.format("%s%.1f MB", s, b / 1e3) // NOSONAR
-                : (b /= 1000) < 999_950L ? String.format("%s%.1f GB", s, b / 1e3) // NOSONAR
-                : (b /= 1000) < 999_950L ? String.format("%s%.1f TB", s, b / 1e3) // NOSONAR
-                : (b /= 1000) < 999_950L ? String.format("%s%.1f PB", s, b / 1e3) // NOSONAR
-                : String.format("%s%.1f EB", s, b / 1e6); // NOSONAR
+    /**
+     * A size for the user to read: SI units, so 1 kB is 1000 bytes, with one decimal.
+     * <p>
+     * The threshold is 999_950 rather than a round million because the next step down is printed with one decimal:
+     * 999_950 bytes would otherwise read as "1000.0 kB".
+     */
+    public static String humanReadableByteCountSI(long bytes) {
+        if (-1000 < bytes && bytes < 1000) {
+            return bytes + " B";
+        }
+
+        CharacterIterator unit = new StringCharacterIterator("kMGTPE");
+        var value = bytes;
+        while (value <= -999_950 || value >= 999_950) {
+            value /= 1000;
+            unit.next();
+        }
+        // Dividing the long and formatting the remainder as a fraction, rather than working in doubles throughout,
+        // is what keeps Long.MIN_VALUE from needing a special case.
+        return String.format("%.1f %cB", value / 1000.0, unit.current());
     }
 }

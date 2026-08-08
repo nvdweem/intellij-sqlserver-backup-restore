@@ -2,3 +2,6 @@
 .idea
 build
 /.intellijPlatform/
+# Written by the Kotlin DSL under Gradle 9
+.kotlin
+*.iml

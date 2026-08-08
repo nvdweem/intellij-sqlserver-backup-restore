@@ -13,6 +13,8 @@ import com.intellij.openapi.vfs.VirtualFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.JComponent;
+import javax.swing.JTree;
 import java.util.List;
 
 /**
@@ -26,6 +28,22 @@ class RemoteFileChooser extends FileChooserDialogImpl {
     RemoteFileChooser(@NotNull FileChooserDescriptor descriptor, @Nullable Project project) {
         super(descriptor, project);
         this.roots = List.copyOf(descriptor.getRoots());
+    }
+
+    /**
+     * The stock chooser paints a name and nothing else, which is not much to pick a backup by when a directory holds a
+     * dozen of them.
+     */
+    @Override
+    protected JComponent createCenterPanel() {
+        var panel = super.createCenterPanel();
+        FileDetailsRenderer.installOn(tree());
+        return panel;
+    }
+
+    /** Exposed for the test that checks the renderer really was installed, which is what failed silently before. */
+    @Nullable JTree tree() {
+        return myFileSystemTree == null ? null : myFileSystemTree.getTree();
     }
 
     @Override

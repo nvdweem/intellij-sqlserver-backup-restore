@@ -8,10 +8,20 @@ updates:
     directory: "/"
     target-branch: "master"
     schedule:
-      interval: "daily"
+      # Monthly and grouped into a single PR: the previous daily cadence produced a steady trickle of one-bump
+      # branches (six were open at once), each costing a full IDE-downloading CI run, and nobody reads them that often.
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      gradle:
+        patterns: [ "*" ]
   # Maintain dependencies for GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     target-branch: "master"
     schedule:
-      interval: "daily"
+      interval: "monthly"
+    open-pull-requests-limit: 5
+    groups:
+      actions:
+        patterns: [ "*" ]

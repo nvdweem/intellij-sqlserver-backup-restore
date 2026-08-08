@@ -10,6 +10,8 @@ import com.intellij.ui.UIBundle;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
+import javax.swing.JComponent;
+
 import static dev.niels.sqlbackuprestore.ui.filedialog.FileDialog.getSelectionKeyName;
 
 /**
@@ -22,6 +24,14 @@ class Chooser extends FileSaverDialogImpl {
     public Chooser(@NotNull FileSaverDescriptor descriptor, @Nullable Project project) {
         super(descriptor, project);
         this.project = project;
+    }
+
+    /** Choosing where to write a backup wants the same size and date as choosing which one to restore. */
+    @Override
+    protected JComponent createCenterPanel() {
+        var panel = super.createCenterPanel();
+        FileDetailsRenderer.installOn(myFileSystemTree == null ? null : myFileSystemTree.getTree());
+        return panel;
     }
 
     @Override

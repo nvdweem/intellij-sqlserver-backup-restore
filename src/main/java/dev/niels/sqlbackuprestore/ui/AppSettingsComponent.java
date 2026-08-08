@@ -8,7 +8,9 @@ import com.intellij.util.ui.UIUtil.ComponentStyle;
 import com.intellij.util.ui.UIUtil.FontColor;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import lombok.Getter;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.jetbrains.annotations.Nullable;
 
 import javax.swing.JPanel;
 
@@ -20,6 +22,7 @@ public class AppSettingsComponent {
     private final JBCheckBox useDbNameOnDownload = new JBCheckBox("Use DB name on backup and download");
     private final JBCheckBox askForRestoreFileLocations = new JBCheckBox("Ask for file locations when restoring");
     private final JBCheckBox enableDownloadOption = new JBCheckBox("Enable 'Backup and Download' option");
+    private final JBCheckBox onlyShowBackupFiles = new JBCheckBox("Only show backup files when restoring");
 
     public AppSettingsComponent() {
         mainPanel = FormBuilder.createFormBuilder()
@@ -37,24 +40,37 @@ public class AppSettingsComponent {
                 .addVerticalGap(1)
                 .addComponent(enableDownloadOption)
                 .addComponent(new JBLabel("Can be used to download a backup from a remote database, not very useful for local database servers", ComponentStyle.SMALL, FontColor.BRIGHTER))
+                .addVerticalGap(1)
+                .addComponent(onlyShowBackupFiles)
+                .addComponent(new JBLabel("Hides everything that isn't a .bak, .trn, .dif or .gzip. Turn off if your backups are named differently.", ComponentStyle.SMALL, FontColor.BRIGHTER))
                 .addComponentFillVertically(new JPanel(), 0)
                 .getPanel();
     }
 
     public boolean isModified() {
         var current = AppSettingsState.getInstance();
-        var modified = !parse(compressionSize.getText()).equals(current.getCompressionSize());
+        var modified = parse(compressionSize.getText()) != current.getCompressionSize();
         modified |= useCompressedBackup.isSelected() != current.isUseCompressedBackup();
         modified |= useDbNameOnDownload.isSelected() != current.isUseDbNameOnDownload();
         modified |= askForRestoreFileLocations.isSelected() != current.isAskForRestoreFileLocations();
         modified |= enableDownloadOption.isSelected() != current.isEnableDownloadOption();
+        modified |= onlyShowBackupFiles.isSelected() != current.isOnlyShowBackupFiles();
         return modified;
     }
 
-    private Long parse(String in) {
+    /**
+     * Total parse of the compression size field: null, blank, unparseable and negative input all mean "always ask" (0).
+     */
+    private long parse(@Nullable String in) {
+        if (StringUtils.isBlank(in)) {
+            return 0L;
+        }
         try {
-            return NumberUtils.createNumber(in).longValue();
-        } catch (NumberFormatException e) {
+            var number = NumberUtils.createNumber(in.trim());
+            return number == null ? 0L : Math.max(0L, number.longValue());
+        } catch (RuntimeException e) {
+            // createNumber throws NumberFormatException for garbage, but has been known to throw other runtime
+            // exceptions on malformed input as well; any failure simply means "no threshold configured".
             return 0L;
         }
     }
@@ -66,6 +82,7 @@ public class AppSettingsComponent {
         current.setUseDbNameOnDownload(useDbNameOnDownload.isSelected());
         current.setAskForRestoreFileLocations(askForRestoreFileLocations.isSelected());
         current.setEnableDownloadOption(enableDownloadOption.isSelected());
+        current.setOnlyShowBackupFiles(onlyShowBackupFiles.isSelected());
     }
 
     public void reset() {
@@ -75,5 +92,7 @@ public class AppSettingsComponent {
         useDbNameOnDownload.setSelected(current.isUseDbNameOnDownload());
         askForRestoreFileLocations.setSelected(current.isAskForRestoreFileLocations());
         enableDownloadOption.setSelected(current.isEnableDownloadOption());
+        onlyShowBackupFiles.setSelected(current.isOnlyShowBackupFiles());
     }
+
 }
