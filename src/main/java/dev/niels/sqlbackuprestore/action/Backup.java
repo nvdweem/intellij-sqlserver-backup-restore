@@ -1,14 +1,11 @@
 package dev.niels.sqlbackuprestore.action;
 
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.DumbAwareAction;
 import dev.niels.sqlbackuprestore.AppSettingsState;
-import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
@@ -93,7 +90,7 @@ public class Backup extends DumbAwareAction {
             try {
                 future.join();
             } catch (Exception ex) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Backup failed", "Unable to back up " + name + ":\n" + rootMessage(ex), NotificationType.ERROR));
+                Notifier.error("Backup failed", "Unable to back up " + name, ex);
             } finally {
                 c.removeWarningConsumer(consumer);
             }
@@ -107,14 +104,6 @@ public class Backup extends DumbAwareAction {
     private CompletableFuture<Long> databaseSize(Client c, String name) {
         return c.getSingle("USE " + Sql.quoted(name) + " exec sp_spaceused @oneresultset = 1", "reserved", String.class)
                 .thenApply(reserved -> Long.parseLong(Strings.CS.removeEnd(StringUtils.trimToEmpty(reserved), " KB").trim()) * 1024);
-    }
-
-    private static String rootMessage(Throwable t) {
-        var cause = t;
-        while (cause.getCause() != null && cause.getMessage() == null) {
-            cause = cause.getCause();
-        }
-        return StringUtils.defaultIfBlank(cause.getMessage(), cause.toString());
     }
 
     private CompletableFuture<String> determineCompression(Client c) {

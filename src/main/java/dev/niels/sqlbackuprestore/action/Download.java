@@ -3,9 +3,6 @@ package dev.niels.sqlbackuprestore.action;
 import com.intellij.database.model.DasObject;
 import com.intellij.database.remote.jdbc.RemoteBlob;
 import com.intellij.ide.util.PropertiesComponent;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
@@ -18,13 +15,12 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.vfs.LocalFileSystem;
 import dev.niels.sqlbackuprestore.AppSettingsState;
-import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.QueryHelper;
 import dev.niels.sqlbackuprestore.query.Sql;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -91,9 +87,7 @@ public class Download extends DumbAwareAction {
     }
 
     private static void reportAndClose(Client c, Throwable t) {
-        var cause = t.getCause() == null ? t : t.getCause();
-        Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Download failed",
-                StringUtils.defaultIfBlank(cause.getMessage(), cause.toString()), NotificationType.ERROR));
+        Notifier.error("Download failed", Notifier.rootMessage(t));
         c.close();
     }
 
@@ -173,7 +167,7 @@ public class Download extends DumbAwareAction {
                 }
                 cleanIfCancelled(indicator);
             } catch (Exception e) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + path + ":\n" + e.getMessage(), NotificationType.ERROR));
+                Notifier.error("Unable to write", "Unable to write to " + path, e);
             }
         }
 
@@ -214,7 +208,7 @@ public class Download extends DumbAwareAction {
                             indicator.setFraction(current / parts);
                             indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
                         } catch (Exception e) {
-                            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to write", "Unable to write to " + target + ":\n" + e.getMessage(), NotificationType.ERROR));
+                            Notifier.error("Unable to write", "Unable to write to " + target, e);
                             error.set(true);
                         }
                     });
@@ -243,7 +237,7 @@ public class Download extends DumbAwareAction {
                 try {
                     Files.delete(target.toPath());
                 } catch (IOException e) {
-                    Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Delete failure", "Unable to delete " + path + " after cancel:\n" + e.getMessage(), NotificationType.WARNING));
+                    Notifier.warning("Delete failure", "Unable to delete " + path + " after cancel:\n" + e.getMessage());
                 }
             }
         }

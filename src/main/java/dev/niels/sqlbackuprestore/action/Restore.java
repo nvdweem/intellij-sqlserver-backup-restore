@@ -2,9 +2,6 @@ package dev.niels.sqlbackuprestore.action;
 
 import com.intellij.database.actions.RefreshModelAction;
 import com.intellij.database.model.DasObject;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.actionSystem.ActionUpdateThread;
 import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.application.ApplicationManager;
@@ -13,6 +10,7 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
 import dev.niels.sqlbackuprestore.AppSettingsState;
 import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Auditor.MessageType;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.query.ProgressTask;
@@ -98,7 +96,7 @@ public class Restore extends DumbAwareAction {
                         Thread.currentThread().interrupt();
                         return;
                     } catch (Exception ex) {
-                        Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "Unable to determine database usage or close connections: " + ex.getMessage(), NotificationType.ERROR));
+                        Notifier.error(Constants.ERROR, "Unable to determine database usage or close connections", ex);
                     }
 
                     c.open();
@@ -108,7 +106,7 @@ public class Restore extends DumbAwareAction {
                                     .thenRun(() -> hackedRefresh(e))
                                     .join();
                         } catch (Exception ex) {
-                            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Restore failed", "Unable to restore " + database + ":\n" + rootMessage(ex), NotificationType.ERROR));
+                            Notifier.error("Restore failed", "Unable to restore " + database, ex);
                         } finally {
                             c.close();
                         }
@@ -116,7 +114,7 @@ public class Restore extends DumbAwareAction {
                 })
                 .whenComplete((result, error) -> {
                     if (error != null) {
-                        Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, rootMessage(error), NotificationType.ERROR));
+                        Notifier.error(Constants.ERROR, Notifier.rootMessage(error));
                     }
                     c.close();
                 });
@@ -157,9 +155,8 @@ public class Restore extends DumbAwareAction {
                 in.transferTo(out);
             } catch (IOException | RuntimeException ex) {
                 log.warn("Failed to unzip {}", file.getPath(), ex);
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Unable to unpack backup",
-                        "Could not unpack " + file.getPath() + ":\n" + ex.getMessage()
-                                + "\nUnpacking happens on this machine, so the file has to be reachable from here.", NotificationType.ERROR));
+                Notifier.error("Unable to unpack backup", "Could not unpack " + file.getPath() + ":\n" + ex.getMessage()
+                        + "\nUnpacking happens on this machine, so the file has to be reachable from here.");
                 return null;
             }
 
@@ -185,8 +182,7 @@ public class Restore extends DumbAwareAction {
                 .toMap();
 
         if (fullsWithPartials.isEmpty()) {
-            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Nothing to restore",
-                    "None of the selected files contain a full backup.", NotificationType.WARNING));
+            Notifier.warning("Nothing to restore", "None of the selected files contain a full backup.");
             return null;
         }
         if (fullsWithPartials.size() == 1 && fullsWithPartials.values().iterator().next().isEmpty()) {
@@ -257,14 +253,6 @@ public class Restore extends DumbAwareAction {
             }
         });
         return result.join();
-    }
-
-    private static String rootMessage(Throwable t) {
-        var cause = t;
-        while (cause.getCause() != null && cause.getMessage() == null) {
-            cause = cause.getCause();
-        }
-        return StringUtils.defaultIfBlank(cause.getMessage(), cause.toString());
     }
 
     @AllArgsConstructor
@@ -359,7 +347,7 @@ public class Restore extends DumbAwareAction {
 
         private void progress(MessageType messageType, String warning) {
             if (messageType == MessageType.ERROR) {
-                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, warning, NotificationType.ERROR));
+                Notifier.error(Constants.ERROR, warning);
             }
             progressConsumer.accept(messageType, warning);
         }

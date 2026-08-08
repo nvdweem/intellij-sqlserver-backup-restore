@@ -1,14 +1,12 @@
 package dev.niels.sqlbackuprestore.ui.filedialog;
 
 import com.intellij.ide.util.PropertiesComponent;
-import com.intellij.notification.Notification;
-import com.intellij.notification.NotificationType;
-import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import dev.niels.sqlbackuprestore.Constants;
+import dev.niels.sqlbackuprestore.Notifier;
 import dev.niels.sqlbackuprestore.query.Client;
 import dev.niels.sqlbackuprestore.ui.SQLHelper;
 import lombok.RequiredArgsConstructor;
@@ -50,7 +48,7 @@ public class FileDialog {
         var roots = fs.getRoots();
 
         if (roots.length == 0) {
-            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", "The database user for this connection is not allowed to read drives.", NotificationType.ERROR));
+            Notifier.error(Constants.ERROR, "The database user for this connection is not allowed to read drives.");
             return null;
         }
 
