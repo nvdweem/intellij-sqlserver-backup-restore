@@ -41,9 +41,13 @@ public class Backup extends DumbAwareAction {
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
         ApplicationManager.getApplication().invokeLater(() -> {
-            try (var c = QueryHelper.client(e)) {
+            var c = QueryHelper.client(e);
+            try {
                 c.setTitle("Backup database");
                 backup(e, c);
+            } finally {
+                // backup() takes a hold of its own when it has something to do; this one is ours.
+                c.release();
             }
         });
     }
@@ -73,7 +77,7 @@ public class Backup extends DumbAwareAction {
             return CompletableFuture.completedFuture(null);
         }
 
-        c.open();
+        c.acquire();
         c.setTitle("Backup " + name);
 
         var future = determineCompression(c)
@@ -83,7 +87,7 @@ public class Backup extends DumbAwareAction {
                 // that won't report it shouldn't fail a backup that already succeeded.
                 .thenCompose(x -> databaseSize(c, name).exceptionally(t -> null))
                 .thenApply(size -> size == null ? target : target.setLength(size))
-                .whenComplete((result, error) -> c.close());
+                .whenComplete((result, error) -> c.release());
 
         new ProgressTask(e.getProject(), "Creating backup", false, consumer -> {
             c.addWarningConsumer(consumer);
@@ -110,7 +114,8 @@ public class Backup extends DumbAwareAction {
         if (!AppSettingsState.getInstance().isUseCompressedBackup()) {
             return CompletableFuture.completedFuture("");
         }
-        return c.<String>getSingle("SELECT cast(SERVERPROPERTY('EditionID') as varchar(20)) AS edition", "edition") // EditionID is supposed to be a bigint but returns as String. Cast to be super sure.
+        // EditionID is supposed to be a bigint but returns as String. Cast to be super sure.
+        return c.getSingle("SELECT cast(SERVERPROPERTY('EditionID') as varchar(20)) AS edition", "edition", String.class)
                 .thenApply(id -> {
                     var result = !editionIdsWithoutCompressionSupport.contains(id);
                     log.info("Version {} does {}support compression", id, result ? "" : "not ");

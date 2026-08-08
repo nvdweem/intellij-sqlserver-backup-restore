@@ -63,7 +63,6 @@ public class Restore extends DumbAwareAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-        @SuppressWarnings("resource")
         var c = QueryHelper.client(e);
         c.setTitle("Restore database");
 
@@ -99,7 +98,8 @@ public class Restore extends DumbAwareAction {
                         Notifier.error(Constants.ERROR, "Unable to determine database usage or close connections", ex);
                     }
 
-                    c.open();
+                    // Handed to the task below, which outlives this method.
+                    c.acquire();
                     new ProgressTask(e.getProject(), "Restore backup", false, consumer -> {
                         try {
                             new RestoreHelper(c, database, toRestore, consumer).restore()
@@ -108,7 +108,7 @@ public class Restore extends DumbAwareAction {
                         } catch (Exception ex) {
                             Notifier.error("Restore failed", "Unable to restore " + database, ex);
                         } finally {
-                            c.close();
+                            c.release();
                         }
                     }).queue();
                 })
@@ -116,7 +116,7 @@ public class Restore extends DumbAwareAction {
                     if (error != null) {
                         Notifier.error(Constants.ERROR, Notifier.rootMessage(error));
                     }
-                    c.close();
+                    c.release();
                 });
     }
 

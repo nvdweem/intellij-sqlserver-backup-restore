@@ -41,7 +41,8 @@ public class Query extends RawQueryRequest {
         };
         c.addWarningConsumer(errorWatcher);
 
-        c.open();
+        // Held for as long as the statement runs, so the session cannot be disconnected out from under it.
+        c.acquire();
         getPromise().onProcessed(x -> {
             c.removeWarningConsumer(errorWatcher);
             var error = failure.get();
@@ -50,7 +51,7 @@ public class Query extends RawQueryRequest {
             } else {
                 future.complete(result);
             }
-            c.close();
+            c.release();
         });
     }
 

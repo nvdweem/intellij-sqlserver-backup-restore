@@ -45,13 +45,15 @@ public class Download extends DumbAwareAction {
 
     @Override
     public void actionPerformed(@NotNull AnActionEvent e) {
-        try (var c = QueryHelper.client(e)) {
-            c.open();
+        var c = QueryHelper.client(e);
+        try {
+            // Held for the asynchronous flow below, which outlives this method.
+            c.acquire();
 
             ApplicationManager.getApplication().invokeLater(() ->
                     new Backup().backup(e, c).thenAcceptAsync(source -> {
                         if (source == null) {
-                            c.close();
+                            c.release();
                             return;
                         }
 
@@ -65,7 +67,7 @@ public class Download extends DumbAwareAction {
                                     var name = source.getName() + (compressed.get() ? ".gzip" : "");
                                     var target = getFile(e, name);
                                     if (target == null) {
-                                        c.close();
+                                        c.release();
                                         return;
                                     }
                                     if (compressed.get() && !Strings.CI.endsWith(target.getAbsolutePath(), ".gzip")) {
@@ -74,21 +76,23 @@ public class Download extends DumbAwareAction {
                                     new DownloadTask(e.getProject(), c, source.getPath(), target).queue();
                                 }))
                                 .exceptionally(t -> {
-                                    reportAndClose(c, t);
+                                    reportAndRelease(c, t);
                                     return null;
                                 });
                     }).exceptionally(t -> {
                         // Without this a backup that failed would never release the session it holds.
-                        reportAndClose(c, t);
+                        reportAndRelease(c, t);
                         return null;
                     })
             );
+        } finally {
+            c.release();
         }
     }
 
-    private static void reportAndClose(Client c, Throwable t) {
+    private static void reportAndRelease(Client c, Throwable t) {
         Notifier.error("Download failed", Notifier.rootMessage(t));
-        c.close();
+        c.release();
     }
 
     @Nullable
@@ -163,7 +167,7 @@ public class Download extends DumbAwareAction {
                 } finally {
                     dropTempTable();
                     // Exactly once: the old exceptionally(close).thenRun(close) pair closed twice on failure.
-                    connection.close();
+                    connection.release();
                 }
                 cleanIfCancelled(indicator);
             } catch (Exception e) {

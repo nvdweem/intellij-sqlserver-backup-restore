@@ -20,14 +20,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BiConsumer;
 
-public class Client implements AutoCloseable {
+/**
+ * A session on the server, shared by everything that is using it: a backup hands the same client to the download that
+ * follows it, and every query takes a hold of its own for as long as it runs. The session is disconnected when the last
+ * holder lets go.
+ * <p>
+ * Deliberately not {@link AutoCloseable}. It used to be, and {@code try (var c = QueryHelper.client(e))} reads as "this
+ * connection is closed at the end of the block" when what it really did was drop one of several holds - which is how
+ * the same client ended up being released twice down one path and never down another.
+ */
+public class Client {
     private final DatabaseSessionClient dbClient;
     private final Auditor auditor;
     @Getter
     private final String dbName;
-    // Opened/closed from the EDT, from background tasks and from the database thread that completes a query.
-    private final AtomicInteger useCount = new AtomicInteger(1);
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    // Acquired/released from the EDT, from background tasks and from the database thread that completes a query.
+    private final AtomicInteger holds = new AtomicInteger(1);
+    private final AtomicBoolean disconnected = new AtomicBoolean(false);
 
     public Client(Project project, LocalDataSource dataSource) {
         dbClient = DatabaseSessionManager.getFacade(project, dataSource, null, null, null, Constants.databaseDepartment).client();
@@ -59,22 +68,16 @@ public class Client implements AutoCloseable {
         return getResult(query, null);
     }
 
-    @SuppressWarnings("unchecked")
-    public <T> CompletableFuture<T> getSingle(String query, String column) {
-        return getResult(query).thenApply(r -> {
-            if (r.isEmpty()) {
-                throw new IllegalStateException("Expected at least one result for " + query);
-            }
-            return (T) r.getFirst().get(column);
-        });
-    }
-
     /**
-     * Same as {@link #getSingle(String, String)}, but checks the value really is a {@code clazz} instead of letting an
-     * unchecked cast blow up somewhere down the chain.
+     * The value of {@code column} in the first row. The type is checked here rather than left to an unchecked cast
+     * that would blow up somewhere further down the chain, with nothing to say which query produced it.
      */
     public <T> CompletableFuture<T> getSingle(String query, String column, @NotNull Class<T> clazz) {
-        return this.<Object>getSingle(query, column).thenApply(value -> {
+        return getResult(query).thenApply(rows -> {
+            if (rows.isEmpty()) {
+                throw new IllegalStateException("Expected at least one result for " + query);
+            }
+            var value = rows.getFirst().get(column);
             if (value != null && !clazz.isInstance(value)) {
                 throw new IllegalStateException("Expected " + column + " to be a " + clazz.getSimpleName() + " but got a " + value.getClass().getSimpleName());
             }
@@ -90,25 +93,24 @@ public class Client implements AutoCloseable {
         return getResult(query);
     }
 
-    public void done() {
-        dbClient.getMessageBus().getDataProducer().processRequest(new Disconnect(dbClient));
-    }
-
-    public void open() {
-        if (useCount.getAndIncrement() == 0) {
+    /**
+     * Takes a hold on this client, keeping the session alive until the matching {@link #release()}. The client comes
+     * back from {@link QueryHelper#client} with one hold already taken, belonging to whoever asked for it.
+     */
+    public void acquire() {
+        if (holds.getAndIncrement() == 0) {
             // Picked up again after everyone let go; it will need disconnecting once more.
-            closed.set(false);
+            disconnected.set(false);
         }
     }
 
     /**
-     * Releases one use of this client and disconnects once nobody holds it any more. Closing more often than opening
-     * used to push the counter below zero, which meant the session was never disconnected afterwards.
+     * Releases one hold, disconnecting the session when it was the last one. Releasing more often than acquiring used
+     * to push the count below zero, after which the session was never disconnected at all.
      */
-    @Override
-    public void close() {
-        if (useCount.updateAndGet(count -> Math.max(0, count - 1)) == 0 && !closed.getAndSet(true)) {
-            done();
+    public void release() {
+        if (holds.updateAndGet(count -> Math.max(0, count - 1)) == 0 && !disconnected.getAndSet(true)) {
+            dbClient.getMessageBus().getDataProducer().processRequest(new Disconnect(dbClient));
         }
     }
 
@@ -119,8 +121,8 @@ public class Client implements AutoCloseable {
      */
     public boolean cleanIfDone() {
         var session = dbClient.getSession();
-        // useCount > 0 means an action still holds this client - it may simply not have connected yet.
-        if (useCount.get() > 0 || session.isConnected()) {
+        // A remaining hold means an action still has this client - it may simply not have connected yet.
+        if (holds.get() > 0 || session.isConnected()) {
             return false;
         }
 
@@ -129,21 +131,5 @@ public class Client implements AutoCloseable {
         }
         Disposer.dispose(session);
         return true;
-    }
-
-    /**
-     * Can be used in the exceptionally method of a CompletableFuture
-     *
-     * @param t The exception that is thrown, will be ignored
-     */
-    @SuppressWarnings({"unused", "SameReturnValue"}) // param t
-    public <T> T close(Throwable t) {
-        close();
-        return null;
-    }
-
-    public <T> T closeAndReturn(T t) {
-        close();
-        return t;
     }
 }

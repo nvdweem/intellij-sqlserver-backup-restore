@@ -124,10 +124,9 @@ tasks {
     // still compiling against the JDK 25 class library, so a Java 22+ API would compile here and fail on a Java 21 IDE.
     withType<JavaCompile> {
         options.release.set(properties("javaVersion").toInt())
-        // serial/this-escape fire on every DataRequest and DialogWrapper subclass and `try` on every explicit
-        // Client.close() - Client is reference counted on purpose - which is simply how these are meant to be used.
-        // Left on, they'd drown out the warnings that do mean something.
-        options.compilerArgs.add("-Xlint:all,-serial,-this-escape,-processing,-try")
+        // serial and this-escape fire on every DataRequest and DialogWrapper subclass, which is simply how those are
+        // meant to be used. Left on, they'd drown out the warnings that do mean something.
+        options.compilerArgs.add("-Xlint:all,-serial,-this-escape,-processing")
     }
 
     test {
