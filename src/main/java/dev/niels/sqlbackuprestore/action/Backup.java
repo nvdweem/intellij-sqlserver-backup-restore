@@ -25,6 +25,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Function;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -87,16 +88,21 @@ public class Backup extends DumbAwareAction {
         var interrupter = new Interrupter(c);
         var done = new AtomicInteger();
 
+        // Started here rather than inside the task, so that each statement's own error watcher is registered before
+        // the task's progress consumer is - which is the order the single-database backup has always had, and the one
+        // difference between the two that was not accounted for. See Auditor#produce for why the order mattered.
+        var future = backupEachTo(c, folder.getPath(), databases, interrupter, done)
+                .whenComplete((x, error) -> c.release());
+
         new ProgressTask(e.getProject(), "Creating backups", interrupter::interrupt, consumer -> {
             c.addWarningConsumer(consumer);
             try {
-                backupEachTo(c, folder.getPath(), databases, interrupter, done).join();
+                future.join();
                 Notifier.information("Backup finished", "Backed up " + databases.size() + " databases to " + folder.getPath() + ".");
             } catch (Exception ex) {
                 reportMultiBackupFailure(interrupter.wasInterrupted(), done.get(), databases.size(), folder.getPath(), ex);
             } finally {
                 c.removeWarningConsumer(consumer);
-                c.release();
             }
         }).queue();
     }
@@ -108,17 +114,27 @@ public class Backup extends DumbAwareAction {
     private CompletableFuture<?> backupEachTo(Client c, String folder, List<String> databases, Interrupter interrupter, AtomicInteger done) {
         return interrupter.rememberSession()
                 .thenCompose(x -> determineCompression(c))
-                .thenCompose(compress -> {
-                    CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
-                    for (var database : databases) {
-                        chain = chain.thenCompose(x -> {
-                            c.setTitle("Backup " + database);
-                            return backupTo(c, database, ServerPath.join(folder, database + ".bak"), compress)
-                                    .thenRun(done::incrementAndGet);
-                        });
-                    }
-                    return chain;
-                });
+                .thenCompose(compress -> backupEach(databases, done, database -> {
+                    c.setTitle("Backup " + database);
+                    return backupTo(c, database, ServerPath.join(folder, database + ".bak"), compress);
+                }));
+    }
+
+    /**
+     * Runs {@code backupOne} for each database in turn, counting the ones that finished.
+     * <p>
+     * Sequential because they share a connection; running them together would only make them compete for the same
+     * disk while making the progress percentages meaningless. Stopping at the first failure is deliberate too - the
+     * usual reason one fails is that the folder cannot be written, which the rest would fail on as well.
+     *
+     * @param done incremented per database that completed, so a failure can say how far it got.
+     */
+    static CompletableFuture<Void> backupEach(List<String> databases, AtomicInteger done, Function<String, CompletableFuture<?>> backupOne) {
+        CompletableFuture<Void> chain = CompletableFuture.completedFuture(null);
+        for (var database : databases) {
+            chain = chain.thenCompose(x -> backupOne.apply(database).thenRun(done::incrementAndGet));
+        }
+        return chain;
     }
 
     private CompletableFuture<?> backupTo(Client c, String database, String path, boolean compress) {

@@ -6,6 +6,7 @@ import com.intellij.database.datagrid.DataAuditor;
 import com.intellij.database.datagrid.DataProducer;
 import com.intellij.database.datagrid.DataRequest;
 import com.intellij.database.datagrid.DataRequest.Context;
+import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -13,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
+@Slf4j
 public class Auditor implements DataAuditor {
     // Messages arrive on the database thread while consumers are (un)registered from the EDT or a task thread.
     private final List<BiConsumer<MessageType, String>> consumers = new CopyOnWriteArrayList<>();
@@ -33,9 +35,23 @@ public class Auditor implements DataAuditor {
         consumers.remove(consumer);
     }
 
-    private void produce(MessageType type, String s) {
+    /**
+     * Hands the message to every consumer, and keeps going when one of them fails.
+     * <p>
+     * They share a connection and know nothing about each other, so the order they registered in - which nothing
+     * coordinates - decided who heard about a message and who did not. Letting one failure through here would in
+     * particular cost {@link Query} its error watcher, and a failed BACKUP would be reported as a success. This runs on
+     * the database thread mid-statement, where an escaping exception is nobody's to catch either.
+     */
+    void produce(MessageType type, String s) {
         var message = s == null ? "" : s;
-        consumers.forEach(c -> c.accept(type, message));
+        for (var consumer : consumers) {
+            try {
+                consumer.accept(type, message);
+            } catch (Exception e) {
+                log.warn("A {} message consumer failed", type, e);
+            }
+        }
     }
 
     @Override
