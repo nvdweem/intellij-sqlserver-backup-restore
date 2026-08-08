@@ -306,10 +306,24 @@ public class Restore extends DumbAwareAction {
         }
 
         private CompletableFuture<?> restoreOne(RemoteFileWithMeta backup) {
+            return statementFor(backup).thenCompose(connection::execute);
+        }
+
+        /**
+         * Only a full backup needs to know what is inside it: it is restored WITH MOVE, to paths the user may want to
+         * change first. A differential goes on top of the files the full restore has already put in place and names
+         * none of them, so it needs neither the file list nor the data directory.
+         */
+        private CompletableFuture<String> statementFor(RemoteFileWithMeta backup) {
+            var disk = "N'" + Sql.literal(backup.getFile().getPath()) + "'";
+            if (action.getType(backup) != BackupType.FULL) {
+                return CompletableFuture.completedFuture(
+                        "RESTORE DATABASE %s FROM DISK = %s WITH file = 1, NOUNLOAD, STATS = 5".formatted(Sql.quoted(target), disk));
+            }
+
             return readFileList(backup)
                     .thenCompose(files -> defaultDataDirectory().thenApply(directory -> assignTargets(files, directory)))
-                    .thenApply(files -> restoreStatement(backup, files))
-                    .thenCompose(connection::execute);
+                    .thenApply(files -> fullRestoreStatement(disk, files));
         }
 
         private CompletableFuture<List<RestoreFile>> readFileList(RemoteFileWithMeta backup) {
@@ -322,12 +336,7 @@ public class Restore extends DumbAwareAction {
             return files;
         }
 
-        private String restoreStatement(RemoteFileWithMeta backup, List<RestoreFile> files) {
-            var disk = "N'" + Sql.literal(backup.getFile().getPath()) + "'";
-            if (action.getType(backup) != BackupType.FULL) {
-                return "RESTORE DATABASE %s FROM DISK = %s WITH file = 1, NOUNLOAD, STATS = 5".formatted(Sql.quoted(target), disk);
-            }
-
+        private String fullRestoreStatement(String disk, List<RestoreFile> files) {
             if (AppSettingsState.getInstance().isAskForRestoreFileLocations()) {
                 askForFileLocations(files);
             }
