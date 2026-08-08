@@ -258,6 +258,21 @@ public class Restore extends DumbAwareAction {
     @AllArgsConstructor
     @Slf4j
     private static class RestoreHelper {
+        /** Everything up to and including the last separator of a {@code physical_name}. */
+        private static final String DIRECTORY_OF = """
+                LEFT(physical_name, LEN(physical_name) - (CASE
+                    WHEN CHARINDEX('\\', REVERSE(physical_name)) > CHARINDEX('/', REVERSE(physical_name))
+                    THEN CHARINDEX('\\', REVERSE(physical_name))
+                    ELSE CHARINDEX('/', REVERSE(physical_name))
+                END) + 1)""";
+
+        private static final String DEFAULT_DATA_DIRECTORY = """
+                SELECT TOP 1 %1$s AS path, COUNT(*)
+                FROM sys.master_files mf
+                INNER JOIN sys.[databases] d ON mf.[database_id] = d.[database_id]
+                GROUP BY %1$s
+                ORDER BY COUNT(*) DESC;""".formatted(DIRECTORY_OF);
+
         private final Client connection;
         private final String target;
         private final RestoreAction action;
@@ -276,7 +291,7 @@ public class Restore extends DumbAwareAction {
                 chain = chain
                         .thenCompose(x -> connection.getResult("RESTORE FILELISTONLY FROM DISK = N'" + Sql.literal(file.getFile().getPath()) + "';"))
                         .thenApply(temp::setFiles)
-                        .thenCompose(x -> determineTargetPath())
+                        .thenCompose(x -> defaultDataDirectory())
                         .thenApply(temp::setLocation)
                         .thenAccept(this::defaultFileNames)
                         .thenApply(v -> determineRestoreQuery(file, temp))
@@ -333,16 +348,12 @@ public class Restore extends DumbAwareAction {
             return target + "_" + count + ext;
         }
 
-        private CompletableFuture<String> determineTargetPath() {
-            var max = "case when CHARINDEX('\\',REVERSE(physical_name)) > CHARINDEX('/',REVERSE(physical_name)) then CHARINDEX('\\',REVERSE(physical_name)) else CHARINDEX('/',REVERSE(physical_name)) end";
-            var path = "LEFT(physical_name,LEN(physical_name)-(" + max + ")+1)";
-            var pathQuery = "SELECT top 1 " + path + " path, count(*)\n" +
-                    "    FROM sys.master_files mf\n" +
-                    "    INNER JOIN sys.[databases] d ON mf.[database_id] = d.[database_id]  \n" +
-                    "group by " + path + "\n" +
-                    "order by count(*) desc;";
-
-            return connection.getSingle(pathQuery, "path");
+        /**
+         * Where to put the restored data files: the directory that already holds most of this server's database files.
+         * The server may well be running on Linux, hence the two separators.
+         */
+        private CompletableFuture<String> defaultDataDirectory() {
+            return connection.getSingle(DEFAULT_DATA_DIRECTORY, "path", String.class);
         }
 
         private void progress(MessageType messageType, String warning) {

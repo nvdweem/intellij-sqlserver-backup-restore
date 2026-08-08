@@ -8,91 +8,89 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-public interface SQLHelper {
+/**
+ * The queries behind the remote file picker. They come from SQL Server Management Studio, which is why they go out of
+ * their way to work on servers that predate the {@code sys.dm_os_*} views and fall back to the {@code xp_} procedures.
+ */
+public final class SQLHelper {
     /** A registry read or a directory listing on a busy server can take a moment; two seconds was optimistic. */
-    int TIMEOUT_SECONDS = 10;
+    private static final int TIMEOUT_SECONDS = 10;
 
-    @SneakyThrows
-    static String getDefaultBackupDirectory(Client connection) {
-        return (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +
-                "if 1=isnull(cast(SERVERPROPERTY('IsLocalDB') as bit), 0)\n" +
-                "select @BackupDirectory=cast(SERVERPROPERTY('instancedefaultdatapath') as nvarchar(512))\n" +
-                "else\n" +
-                "exec master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\\Microsoft\\MSSQLServer\\MSSQLServer', N'BackupDirectory', @BackupDirectory OUTPUT\n" +
-                "\n" +
-                "select @BackupDirectory as directory", "directory").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    private static final String DEFAULT_BACKUP_DIRECTORY = """
+            declare @BackupDirectory nvarchar(512)
+            if 1=isnull(cast(SERVERPROPERTY('IsLocalDB') as bit), 0)
+                select @BackupDirectory=cast(SERVERPROPERTY('instancedefaultdatapath') as nvarchar(512))
+            else
+                exec master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\\Microsoft\\MSSQLServer\\MSSQLServer', N'BackupDirectory', @BackupDirectory OUTPUT
+
+            select @BackupDirectory as directory""";
+
+    private static final String DRIVES = """
+            create table #fixdrv (Name sysname NOT NULL, Size int NOT NULL, Type sysname NULL)
+            if exists (select 1 from sys.all_objects where name = 'dm_os_enumerate_fixed_drives' and type = 'V' and is_ms_shipped = 1)
+            begin
+                insert #fixdrv select fixed_drive_path, free_space_in_bytes/(1024*1024), drive_type_desc from sys.dm_os_enumerate_fixed_drives
+            end
+            else
+            begin
+                insert #fixdrv (Name, Size) EXECUTE master.dbo.xp_fixeddrives
+                update #fixdrv set Name = Name + ':/', Type = 'Fixed' where Type IS NULL
+            end
+            select * from #fixdrv;
+            drop table #fixdrv;""";
+
+    /**
+     * Lists one directory. {@code %s} is the (escaped) path to list.
+     */
+    private static final String PATH_CHILDREN = """
+            declare @Path nvarchar(255)
+            select @Path = N'%s'
+
+            create table #filetmpfin (Name nvarchar(255) NOT NULL, IsFile int NULL, FullName nvarchar(300) not NULL)
+            if exists (select 1 from sys.all_objects where name = 'dm_os_enumerate_filesystem' and type = 'IF' and is_ms_shipped = 1)
+            begin
+                insert #filetmpfin
+                    select file_or_directory_name, 1 - is_directory, full_filesystem_path
+                    from sys.dm_os_enumerate_filesystem(@Path, '*')
+                    where [level] = 0
+            end
+            else
+            begin
+                if (right(@Path, 1) = '\\')
+                    select @Path = substring(@Path, 1, len(@Path) - charindex('\\', reverse(@Path)))
+
+                create table #filetmp (Name nvarchar(255) NOT NULL, depth int NOT NULL, IsFile bit NULL)
+                insert #filetmp EXECUTE master.dbo.xp_dirtree @Path, 1, 1
+                insert #filetmpfin select Name, IsFile, @Path + '\\' + Name from #filetmp
+                drop table #filetmp
+            end
+
+            SELECT Name, IsFile, FullName FROM #filetmpfin ORDER BY IsFile ASC, Name ASC
+            drop table #filetmpfin""";
+
+    private SQLHelper() {
     }
 
     @SneakyThrows
-    static List<Map<String, Object>> getDrives(Client connection) {
-        return connection.getResult("create table #fixdrv ( Name sysname NOT NULL, Size int NOT NULL, Type sysname NULL )\n" +
-                "if exists (select 1 from sys.all_objects where name='dm_os_enumerate_fixed_drives' and type ='V' and is_ms_shipped = 1)\n" +
-                "begin\n" +
-                "    insert #fixdrv select fixed_drive_path, free_space_in_bytes/(1024*1024), drive_type_desc from sys.dm_os_enumerate_fixed_drives      \n" +
-                "end\n" +
-                "else\n" +
-                "begin\n" +
-                "    insert #fixdrv (Name, Size) EXECUTE master.dbo.xp_fixeddrives \n" +
-                "    update #fixdrv set Name = Name + ':/', Type = 'Fixed' where Type IS NULL \n" +
-                "end\n" +
-                "select * from #fixdrv;\n" +
-                "drop table #fixdrv;").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    public static String getDefaultBackupDirectory(Client connection) {
+        return connection.getSingle(DEFAULT_BACKUP_DIRECTORY, "directory", String.class).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
     }
 
     @SneakyThrows
-    static List<Map<String, Object>> getSQLPathChildren(Client connection, String path) {
-        return connection.getResult("declare @Path nvarchar(255)\n" +
-                "declare @Name nvarchar(255)\n" +
-                "select @Path = N'" + Sql.literal(path) + "'\n" +
-                "select @Name = null;\n" +
-                "\n" +
-                "create table #filetmpfin (Name nvarchar(255) NOT NULL, IsFile int NULL, FullName nvarchar(300) not NULL)\n" +
-                "declare @FullName nvarchar(300)  \n" +
-                "if exists (select 1 from sys.all_objects where name = 'dm_os_enumerate_filesystem' and type = 'IF' and is_ms_shipped = 1)\n" +
-                "begin \n" +
-                "    if (@Name is null)\n" +
-                "    begin \n" +
-                "        insert #filetmpfin select file_or_directory_name, 1 - is_directory, full_filesystem_path from sys.dm_os_enumerate_filesystem(@Path, '*') where [level] = 0\n" +
-                "    end \n" +
-                "    if (NOT @Name is null)\n" +
-                "    begin \n" +
-                "    if(@Path is null) \n" +
-                "        select @FullName = @Name \n" +
-                "    else\n" +
-                "        select @FullName = @Path \t+ convert(nvarchar(1), serverproperty('PathSeparator')) + @Name \n" +
-                "        create table #filetmp3 ( Exist bit NOT NULL, IsDir bit NOT NULL, DirExist bit NULL ) \n" +
-                "        insert #filetmp3 select file_exists, file_is_a_directory, parent_directory_exists from sys.dm_os_file_exists(@FullName) \n" +
-                "        insert #filetmpfin select @Name, 1-IsDir, @FullName from #filetmp3 where Exist = 1 or IsDir = 1 \n" +
-                "        drop table #filetmp3 \n" +
-                "    end\n" +
-                "end \n" +
-                "else      \n" +
-                "begin         \n" +
-                "    if(@Name is null)\n" +
-                "    begin\n" +
-                "    if (right(@Path, 1) = '\\')\n" +
-                "        select @Path= substring(@Path, 1, len(@Path) - charindex('\\', reverse(@Path)))\n" +
-                "    create table #filetmp (Name nvarchar(255) NOT NULL, depth int NOT NULL, IsFile bit NULL )\n" +
-                "    insert #filetmp EXECUTE master.dbo.xp_dirtree @Path, 1, 1\n" +
-                "    insert #filetmpfin select Name, IsFile, @Path + '\\' + Name from #filetmp f\n" +
-                "    drop table #filetmp\n" +
-                "    end \n" +
-                "    if(NOT @Name is null)\n" +
-                "    begin\n" +
-                "    if(@Path is null)\n" +
-                "        select @FullName = @Name\n" +
-                "    else\n" +
-                "        select @FullName = @Path +  '\\' + @Name\n" +
-                "    if (right(@FullName, 1) = '\\')\n" +
-                "        select @Path= substring(@Path, 1, len(@FullName) - charindex('\\', reverse(@FullName)))\n" +
-                "    create table #filetmp2 ( Exist bit NOT NULL, IsDir bit NOT NULL, DirExist bit NULL )\n" +
-                "    insert #filetmp2 EXECUTE master.dbo.xp_fileexist @FullName\n" +
-                "    insert #filetmpfin select @Name, 1-IsDir, @FullName from #filetmp2 where Exist = 1 or IsDir = 1 \n" +
-                "    drop table #filetmp2\n" +
-                "    end \n" +
-                "end \n" +
-                "\n" +
-                "SELECT Name, IsFile, FullName FROM #filetmpfin ORDER BY IsFile ASC, Name ASC \n" +
-                "drop table #filetmpfin").get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    public static List<Map<String, Object>> getDrives(Client connection) {
+        return connection.getResult(DRIVES).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    @SneakyThrows
+    public static List<Map<String, Object>> getSQLPathChildren(Client connection, String path) {
+        return connection.getResult(pathChildrenQuery(path)).get(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    }
+
+    /**
+     * Split out so the rendering can be tested: a stray {@code %} in the query text would only fail here, at the point
+     * a user browses a directory.
+     */
+    static String pathChildrenQuery(String path) {
+        return PATH_CHILDREN.formatted(Sql.literal(path));
     }
 }
