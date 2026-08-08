@@ -158,6 +158,12 @@ tasks {
                 systemProperty(key, value.get())
             }
         }
+
+        // The IDE fetches JDBC drivers on demand, which a test must not do. ClientIT points DataGrip's driver
+        // definition at this jar instead; the platform's classloader hides it from getCodeSource(), so pass the path.
+        systemProperty("it.mssql.jdbc.jar", configurations.testRuntimeClasspath.map { classpath ->
+            classpath.files.first { it.name.startsWith("mssql-jdbc") }.absolutePath
+        }.get())
     }
 
     wrapper {
