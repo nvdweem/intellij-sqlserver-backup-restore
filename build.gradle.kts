@@ -1,6 +1,7 @@
 import org.jetbrains.changelog.Changelog
 import org.jetbrains.changelog.markdownToHTML
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
+import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 
 fun properties(key: String) = project.findProperty(key).toString()
 
@@ -43,11 +44,25 @@ dependencies {
             useInstaller = false
         }
         bundledPlugins(providers.gradleProperty("platformBundledPlugins").map { it.split(',') })
+
+        testFramework(TestFrameworkType.Platform)
+        testFramework(TestFrameworkType.JUnit5)
     }
 
-    testImplementation(platform("org.junit:junit-bom:5.11.4"))
+    // 5.12 at the very least: the platform's fixture extension calls ExtensionContext.getEnclosingTestClasses(),
+    // which does not exist before that, and every platform test fails to initialise.
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // The platform's test framework is still rooted in JUnit 3's TestCase, and its JUnit 5 session listener fails to
+    // load without it - taking every test in the build down with it, including the ones that never touch the platform.
+    testImplementation("junit:junit:4.13.2")
+    testRuntimeOnly("org.junit.vintage:junit-vintage-engine")
+
+    // The IDE downloads this driver on demand at runtime, so it is not on the plugin's compile classpath. The
+    // integration tests need it to talk to a real server, and pinning it here keeps them reproducible.
+    testImplementation("com.microsoft.sqlserver:mssql-jdbc:12.8.1.jre11")
 }
 
 // Configure Gradle IntelliJ Plugin - read more: https://github.com/JetBrains/gradle-intellij-plugin
@@ -131,6 +146,18 @@ tasks {
 
     test {
         useJUnitPlatform()
+
+        // Forwarded explicitly: a -D on the Gradle command line reaches the Gradle JVM, not the forked test JVM, so
+        // without this the integration tests would silently keep using their defaults. Registered as task inputs too,
+        // or pointing them at a different server would be answered with UP-TO-DATE.
+        // (The IT_SQLSERVER_* environment variables need none of this - the test JVM inherits the environment.)
+        listOf("it.sqlserver.url", "it.sqlserver.user", "it.sqlserver.password").forEach { key ->
+            val value = providers.systemProperty(key)
+            inputs.property(key, value).optional(true)
+            if (value.isPresent) {
+                systemProperty(key, value.get())
+            }
+        }
     }
 
     wrapper {
