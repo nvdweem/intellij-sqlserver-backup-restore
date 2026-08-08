@@ -208,43 +208,53 @@ public class Download extends DumbAwareAction {
             }
         }
 
-        private CompletableFuture<?> download(@NotNull ProgressIndicator indicator, FileOutputStream fos, Long s) {
-            // Split into 100 parts unless the parts are smaller than 1MB
-            var part = Math.max(1_000_000, (long) Math.ceil(s / 100d));
-            var parts = Math.ceil((double) s / part);
-            // T-SQL SUBSTRING is 1-based. Starting at `current * part` made the first chunk one byte short and, when
-            // the total size was an exact multiple of the chunk size, dropped the very last byte of the download.
+        /**
+         * Pulls the staged blob down one chunk at a time, sequentially - the whole point of the temp table is that the
+         * file never has to be held in memory in one piece, at either end.
+         */
+        private CompletableFuture<?> download(@NotNull ProgressIndicator indicator, FileOutputStream fos, long totalBytes) {
+            // A hundred chunks, so the progress bar moves, unless that would make them smaller than a megabyte.
+            var chunkSize = Math.max(1_000_000, (long) Math.ceil(totalBytes / 100d));
+            var chunks = (long) Math.ceil((double) totalBytes / chunkSize);
 
             CompletableFuture<?> chain = CompletableFuture.completedFuture(null);
-
-            // Build a chain of part downloads that are executed sequentially
-            AtomicBoolean error = new AtomicBoolean(false);
-            for (var i = 0; i < parts; i++) {
-                var current = i;
+            var failed = new AtomicBoolean(false);
+            for (var i = 0L; i < chunks; i++) {
+                var chunk = i;
                 chain = chain.thenCompose(x -> {
-                    // Allow cancelling and don't proceed if there was an error
-                    if (error.get() || indicator.isCanceled()) {
+                    if (failed.get() || indicator.isCanceled()) {
                         return CompletableFuture.completedFuture(null);
                     }
-
-                    // Get the next part and store it
-                    return connection.withRows(String.format("select substring(f, %s, %s) AS part from #filedownload", current * part + 1, part), (cols, rows) -> {
-                        try {
-                            write(fos, rows.getFirst().getValue(0));
-                            indicator.setFraction(current / parts);
-                            indicator.setText(String.format("%s: %s/%s", getTitle(), Util.humanReadableByteCountSI(Math.min(s, (current + 1) * part)), Util.humanReadableByteCountSI(s)));
-                        } catch (Exception e) {
-                            Notifier.error("Unable to write", "Unable to write to " + target, e);
-                            error.set(true);
-                        }
-                    });
+                    return downloadChunk(indicator, fos, totalBytes, chunkSize, chunks, chunk, failed);
                 });
             }
             return chain;
         }
 
+        private CompletableFuture<?> downloadChunk(ProgressIndicator indicator, FileOutputStream fos, long totalBytes,
+                                                   long chunkSize, long chunks, long chunk, AtomicBoolean failed) {
+            // SUBSTRING is 1-based in T-SQL. Starting at `chunk * chunkSize` made the first chunk a byte short, and
+            // every later one inherited the offset, so a file whose size was an exact multiple of the chunk size lost
+            // its last byte.
+            var offset = chunk * chunkSize + 1;
+
+            return connection.withRows("select substring(f, %s, %s) AS part from #filedownload".formatted(offset, chunkSize), (columns, rows) -> {
+                try {
+                    write(fos, rows.getFirst().getValue(0));
+                    indicator.setFraction((double) chunk / chunks);
+                    indicator.setText("%s: %s/%s".formatted(getTitle(),
+                            Util.humanReadableByteCountSI(Math.min(totalBytes, (chunk + 1) * chunkSize)),
+                            Util.humanReadableByteCountSI(totalBytes)));
+                } catch (Exception e) {
+                    Notifier.error("Unable to write", "Unable to write to " + target, e);
+                    failed.set(true);
+                }
+            });
+        }
+
         /**
-         * Write a single part to the file stream
+         * Which type the driver hands back for the blob column depends on how it decided to fetch it, so all three
+         * possibilities are handled rather than guessed at.
          */
         private void write(FileOutputStream fos, Object blob) throws IOException, SQLException {
             switch (blob) {
@@ -255,9 +265,6 @@ public class Download extends DumbAwareAction {
             }
         }
 
-        /**
-         * Check if the indicator was cancelled, if so delete the target file.
-         */
         private void cleanIfCancelled(ProgressIndicator indicator) {
             if (indicator.isCanceled()) {
                 try {
@@ -268,15 +275,12 @@ public class Download extends DumbAwareAction {
             }
         }
 
-        /**
-         * Write byte array to file
-         */
         private void saveBlob(FileOutputStream fos, byte[] blob) throws IOException {
             fos.write(blob);
         }
 
         /**
-         * Write RemoteBlob to file
+         * A blob that stayed on the server is read in pieces of its own; {@link RemoteBlob#getBytes} counts from 1.
          */
         private void saveBlob(FileOutputStream fos, RemoteBlob blob) throws IOException, SQLException {
             long position = 1;
@@ -288,9 +292,6 @@ public class Download extends DumbAwareAction {
             }
         }
 
-        /**
-         * Write string to file
-         */
         private void saveBlob(FileOutputStream fos, String blob) throws IOException {
             saveBlob(fos, blob.getBytes());
         }

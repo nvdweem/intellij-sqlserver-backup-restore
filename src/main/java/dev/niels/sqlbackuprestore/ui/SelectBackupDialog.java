@@ -43,11 +43,15 @@ public class SelectBackupDialog extends DialogWrapper {
         return dialog[0] != null && confirmed[0] ? dialog[0].result : null;
     }
 
-    private String[] fileToStringArr(RestoreAction action) {
-        var sub = action.differentialBackup() != null;
-        var file = sub ? action.differentialBackup() : action.fullBackup();
+    /**
+     * One row per choice. A full backup that also has differentials is listed once on its own and once per
+     * differential; those rows are indented, so they read as belonging to the full backup above them.
+     */
+    private String[] toRow(RestoreAction action) {
+        var isDifferential = action.differentialBackup() != null;
+        var file = isDifferential ? action.differentialBackup() : action.fullBackup();
         return new String[]{
-                (sub ? "- " : "") + file.getFile().getPath(),
+                (isDifferential ? "- " : "") + file.getFile().getPath(),
                 file.getType().toString(),
                 file.getBackupFinishDate(),
                 file.getMachineName()
@@ -67,7 +71,7 @@ public class SelectBackupDialog extends DialogWrapper {
             actions.add(new RestoreAction(key, null));
             value.forEach(f -> actions.add(new RestoreAction(key, f)));
         });
-        actions.forEach(a -> model.addRow(fileToStringArr(a)));
+        actions.forEach(a -> model.addRow(toRow(a)));
 
         var table = new JBTable(model);
         table.getColumnModel().getColumn(0).setPreferredWidth(240);

@@ -68,7 +68,15 @@ public class Query extends RawQueryRequest {
         if (consumer != null) {
             consumer.accept(columns, StreamEx.of(list).select(GridRow.class).toImmutableList());
         }
-        result.addAll(list.stream().map(r -> columns.stream().collect(HashMap<String, Object>::new, (m, v) -> m.put(v.getName(), v.getValue(r)), HashMap::putAll)).toList());
+
+        for (var row : list) {
+            // A plain HashMap rather than Collectors.toMap: a null in any column would make that throw.
+            Map<String, Object> values = new HashMap<>();
+            for (var column : columns) {
+                values.put(column.getName(), column.getValue(row));
+            }
+            result.add(values);
+        }
     }
 
     @Override public void afterLastRowAdded(@NotNull GridDataRequest.Context context, int total) {
