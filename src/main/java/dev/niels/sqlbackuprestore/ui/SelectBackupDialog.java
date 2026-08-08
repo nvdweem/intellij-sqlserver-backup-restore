@@ -19,24 +19,24 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class RestoreFullPartialDialog extends DialogWrapper {
-    private final Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials;
+public class SelectBackupDialog extends DialogWrapper {
+    private final Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithDifferentials;
     @Getter private @Nullable RestoreAction result;
 
-    private RestoreFullPartialDialog(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials) {
+    private SelectBackupDialog(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithDifferentials) {
         super(project);
-        this.fullsWithPartials = fullsWithPartials;
+        this.fullsWithDifferentials = fullsWithDifferentials;
 
         init();
         setTitle("Select Backup");
         setOKActionEnabled(false);
     }
 
-    public static @Nullable RestoreAction choose(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithPartials) {
-        var dialog = new RestoreFullPartialDialog[1];
+    public static @Nullable RestoreAction choose(@Nullable Project project, Map<RemoteFileWithMeta, List<RemoteFileWithMeta>> fullsWithDifferentials) {
+        var dialog = new SelectBackupDialog[1];
         var confirmed = new boolean[1];
         ApplicationManager.getApplication().invokeAndWait(() -> {
-            dialog[0] = new RestoreFullPartialDialog(project, fullsWithPartials);
+            dialog[0] = new SelectBackupDialog(project, fullsWithDifferentials);
             confirmed[0] = dialog[0].showAndGet();
         });
         // Only honour the selection when the dialog was actually closed with OK; cancelling must not restore anything.
@@ -44,8 +44,8 @@ public class RestoreFullPartialDialog extends DialogWrapper {
     }
 
     private String[] fileToStringArr(RestoreAction action) {
-        var sub = action.partialBackup() != null;
-        var file = sub ? action.partialBackup() : action.fullBackup();
+        var sub = action.differentialBackup() != null;
+        var file = sub ? action.differentialBackup() : action.fullBackup();
         return new String[]{
                 (sub ? "- " : "") + file.getFile().getPath(),
                 file.getType().toString(),
@@ -63,7 +63,7 @@ public class RestoreFullPartialDialog extends DialogWrapper {
         };
 
         var actions = new ArrayList<RestoreAction>();
-        fullsWithPartials.forEach((key, value) -> {
+        fullsWithDifferentials.forEach((key, value) -> {
             actions.add(new RestoreAction(key, null));
             value.forEach(f -> actions.add(new RestoreAction(key, f)));
         });

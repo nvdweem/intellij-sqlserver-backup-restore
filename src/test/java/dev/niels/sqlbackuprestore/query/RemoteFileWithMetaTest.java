@@ -26,7 +26,7 @@ class RemoteFileWithMetaTest {
     @DisplayName("BackupType maps the documented header values")
     void mapsBackupTypes() {
         assertEquals(BackupType.FULL, BackupType.from(1));
-        assertEquals(BackupType.PARTIAL, BackupType.from(5));
+        assertEquals(BackupType.DIFFERENTIAL, BackupType.from(5));
         assertEquals(BackupType.UNSUPPORTED, BackupType.from(2));
         assertEquals(BackupType.UNSUPPORTED, BackupType.from(-1));
     }
@@ -35,9 +35,9 @@ class RemoteFileWithMetaTest {
     @DisplayName("a differential belongs to the full backup it was taken against")
     void matchesDifferentialToItsFull() {
         var full = backup(BackupType.FULL, LSN_A, BigDecimal.ZERO);
-        var differential = backup(BackupType.PARTIAL, LSN_B, LSN_A);
+        var differential = backup(BackupType.DIFFERENTIAL, LSN_B, LSN_A);
 
-        assertTrue(differential.isPartialOf(full));
+        assertTrue(differential.isDifferentialOf(full));
         assertTrue(full.isFull());
         assertFalse(differential.isFull());
     }
@@ -46,9 +46,9 @@ class RemoteFileWithMetaTest {
     @DisplayName("a differential taken against a different full backup does not match")
     void rejectsUnrelatedFull() {
         var otherFull = backup(BackupType.FULL, LSN_B, BigDecimal.ZERO);
-        var differential = backup(BackupType.PARTIAL, LSN_B, LSN_A);
+        var differential = backup(BackupType.DIFFERENTIAL, LSN_B, LSN_A);
 
-        assertFalse(differential.isPartialOf(otherFull));
+        assertFalse(differential.isDifferentialOf(otherFull));
     }
 
     @Test
@@ -59,26 +59,26 @@ class RemoteFileWithMetaTest {
         assertEquals(HUGE_A.longValue(), HUGE_B.longValue());
 
         var full = backup(BackupType.FULL, HUGE_A, BigDecimal.ZERO);
-        assertFalse(backup(BackupType.PARTIAL, HUGE_B, HUGE_B).isPartialOf(full));
-        assertTrue(backup(BackupType.PARTIAL, HUGE_B, HUGE_A).isPartialOf(full));
+        assertFalse(backup(BackupType.DIFFERENTIAL, HUGE_B, HUGE_B).isDifferentialOf(full));
+        assertTrue(backup(BackupType.DIFFERENTIAL, HUGE_B, HUGE_A).isDifferentialOf(full));
     }
 
     @Test
     @DisplayName("a full backup is never the differential of another")
-    void fullIsNeverAPartial() {
+    void fullIsNeverADifferential() {
         var full = backup(BackupType.FULL, LSN_A, BigDecimal.ZERO);
         var otherFull = backup(BackupType.FULL, LSN_B, LSN_A);
 
-        assertFalse(otherFull.isPartialOf(full));
+        assertFalse(otherFull.isDifferentialOf(full));
     }
 
     @Test
     @DisplayName("a header without usable LSNs doesn't match anything")
     void missingLsnsNeverMatch() {
         var full = backup(BackupType.FULL, null, BigDecimal.ZERO);
-        var differential = backup(BackupType.PARTIAL, LSN_B, null);
+        var differential = backup(BackupType.DIFFERENTIAL, LSN_B, null);
 
-        assertFalse(differential.isPartialOf(full));
-        assertFalse(backup(BackupType.PARTIAL, LSN_B, LSN_A).isPartialOf(full));
+        assertFalse(differential.isDifferentialOf(full));
+        assertFalse(backup(BackupType.DIFFERENTIAL, LSN_B, LSN_A).isDifferentialOf(full));
     }
 }

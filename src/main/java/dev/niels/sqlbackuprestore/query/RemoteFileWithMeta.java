@@ -53,8 +53,8 @@ public class RemoteFileWithMeta {
     /**
      * A differential belongs to the full backup whose FirstLSN it was taken against.
      */
-    public boolean isPartialOf(RemoteFileWithMeta other) {
-        return type == BackupType.PARTIAL && other.type == BackupType.FULL
+    public boolean isDifferentialOf(RemoteFileWithMeta other) {
+        return type == BackupType.DIFFERENTIAL && other.type == BackupType.FULL
                 && databaseBackupLSN != null && other.firstLSN != null
                 && other.firstLSN.compareTo(databaseBackupLSN) == 0;
     }
@@ -74,13 +74,17 @@ public class RemoteFileWithMeta {
         };
     }
 
+    /**
+     * The BackupType column of {@code RESTORE HEADERONLY}. Type 2 is a transaction log backup and 4 a file backup;
+     * neither is supported yet, so they land in UNSUPPORTED along with everything else.
+     */
     public enum BackupType {
-        FULL, PARTIAL, UNSUPPORTED;
+        FULL, DIFFERENTIAL, UNSUPPORTED;
 
         public static BackupType from(int value) {
             return switch (value) {
                 case 1 -> FULL;
-                case 5 -> PARTIAL;
+                case 5 -> DIFFERENTIAL;
                 default -> UNSUPPORTED;
             };
         }

@@ -19,7 +19,7 @@ import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta;
 import dev.niels.sqlbackuprestore.query.RemoteFileWithMeta.BackupType;
 import dev.niels.sqlbackuprestore.query.Sql;
 import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
-import dev.niels.sqlbackuprestore.ui.RestoreFullPartialDialog;
+import dev.niels.sqlbackuprestore.ui.SelectBackupDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
 import lombok.AllArgsConstructor;
@@ -176,20 +176,20 @@ public class Restore extends DumbAwareAction {
         var withMeta = StreamEx.of(files)
                 .map(RemoteFileWithMeta.factory(c))
                 .toList();
-        var fullsWithPartials = StreamEx.of(withMeta)
+        var fullsWithDifferentials = StreamEx.of(withMeta)
                 .filter(RemoteFileWithMeta::isFull)
-                .mapToEntry(full -> StreamEx.of(withMeta).filter(m -> m.isPartialOf(full)).toList())
+                .mapToEntry(full -> StreamEx.of(withMeta).filter(m -> m.isDifferentialOf(full)).toList())
                 .toMap();
 
-        if (fullsWithPartials.isEmpty()) {
+        if (fullsWithDifferentials.isEmpty()) {
             Notifier.warning("Nothing to restore", "None of the selected files contain a full backup.");
             return null;
         }
-        if (fullsWithPartials.size() == 1 && fullsWithPartials.values().iterator().next().isEmpty()) {
-            return new RestoreAction(fullsWithPartials.keySet().iterator().next(), null);
+        if (fullsWithDifferentials.size() == 1 && fullsWithDifferentials.values().iterator().next().isEmpty()) {
+            return new RestoreAction(fullsWithDifferentials.keySet().iterator().next(), null);
         }
 
-        return RestoreFullPartialDialog.choose(project, fullsWithPartials);
+        return SelectBackupDialog.choose(project, fullsWithDifferentials);
     }
 
     /**
@@ -313,7 +313,7 @@ public class Restore extends DumbAwareAction {
             }
 
             // A differential still has to follow, so leave the database in a restoring state until it has been applied.
-            var recovery = action.partialBackup() == null ? "" : "NORECOVERY, ";
+            var recovery = action.differentialBackup() == null ? "" : "NORECOVERY, ";
             var moves = temp.getFiles().stream()
                     .map(s -> String.format("MOVE N'%s' TO N'%s'", Sql.literal(Objects.toString(s.get("LogicalName"), "")), Sql.literal(Objects.toString(s.get("RestoreAs"), ""))))
                     .collect(Collectors.joining(", "));
@@ -379,13 +379,13 @@ public class Restore extends DumbAwareAction {
         private String location;
     }
 
-    public record RestoreAction(@NotNull RemoteFileWithMeta fullBackup, @Nullable RemoteFileWithMeta partialBackup) {
+    public record RestoreAction(@NotNull RemoteFileWithMeta fullBackup, @Nullable RemoteFileWithMeta differentialBackup) {
         public StreamEx<RemoteFileWithMeta> getFiles() {
-            return StreamEx.of(fullBackup, partialBackup).nonNull();
+            return StreamEx.of(fullBackup, differentialBackup).nonNull();
         }
 
         public BackupType getType(RemoteFileWithMeta bak) {
-            return fullBackup == bak ? BackupType.FULL : partialBackup == bak ? BackupType.PARTIAL : BackupType.UNSUPPORTED;
+            return fullBackup == bak ? BackupType.FULL : differentialBackup == bak ? BackupType.DIFFERENTIAL : BackupType.UNSUPPORTED;
         }
     }
 }
