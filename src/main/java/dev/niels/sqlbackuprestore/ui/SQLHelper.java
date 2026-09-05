@@ -1,16 +1,45 @@
 package dev.niels.sqlbackuprestore.ui;
 
+import com.intellij.openapi.progress.ProgressManager;
 import dev.niels.sqlbackuprestore.query.Client;
 import lombok.SneakyThrows;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public interface SQLHelper {
+    /** How long a directory listing may take; these run on the EDT while the tree expands, so keep it short. */
+    int QUERY_TIMEOUT_SECONDS = 10;
+    /**
+     * The drive listing is the first statement on a fresh session, so it also pays for connecting. It runs under a
+     * cancellable progress, so it can afford to wait longer than the listings.
+     */
+    int CONNECT_TIMEOUT_SECONDS = 60;
+
     /** {@code value} as a T-SQL unicode string literal, quotes doubled. */
     static String literal(String value) {
         return "N'" + value.replace("'", "''") + "'";
+    }
+
+    /**
+     * Waits for {@code future} in short slices so a progress indicator's Cancel button (through
+     * {@link ProgressManager#checkCanceled()}) aborts the wait, and gives up with a descriptive
+     * {@link TimeoutException} after {@code timeoutSeconds}.
+     */
+    static <T> T await(CompletableFuture<T> future, int timeoutSeconds) throws ExecutionException, InterruptedException, TimeoutException {
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        do {
+            try {
+                return future.get(100, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException slice) {
+                ProgressManager.checkCanceled();
+            }
+        } while (System.nanoTime() < deadline);
+        throw new TimeoutException("SQL Server did not answer within " + timeoutSeconds + " seconds");
     }
 
     /**
@@ -19,23 +48,23 @@ public interface SQLHelper {
      */
     @SneakyThrows
     static List<String> createDirectory(Client connection, String path) {
-        return connection.executeCollectingErrors("EXEC master.dbo.xp_create_subdir " + literal(path)).get(10, TimeUnit.SECONDS);
+        return await(connection.executeCollectingErrors("EXEC master.dbo.xp_create_subdir " + literal(path)), QUERY_TIMEOUT_SECONDS);
     }
 
     @SneakyThrows
     static String getDefaultBackupDirectory(Client connection) {
-        return (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +
+        return await(connection.<String>getSingle("declare @BackupDirectory nvarchar(512)\n" +
                 "if 1=isnull(cast(SERVERPROPERTY('IsLocalDB') as bit), 0)\n" +
                 "select @BackupDirectory=cast(SERVERPROPERTY('instancedefaultdatapath') as nvarchar(512))\n" +
                 "else\n" +
                 "exec master.dbo.xp_instance_regread N'HKEY_LOCAL_MACHINE', N'SOFTWARE\\Microsoft\\MSSQLServer\\MSSQLServer', N'BackupDirectory', @BackupDirectory OUTPUT\n" +
                 "\n" +
-                "select @BackupDirectory as directory", "directory").get(2, TimeUnit.SECONDS);
+                "select @BackupDirectory as directory", "directory"), QUERY_TIMEOUT_SECONDS);
     }
 
     @SneakyThrows
     static List<Map<String, Object>> getDrives(Client connection) {
-        return connection.getResult("create table #fixdrv ( Name sysname NOT NULL, Size int NOT NULL, Type sysname NULL )\n" +
+        return await(connection.getResult("create table #fixdrv ( Name sysname NOT NULL, Size int NOT NULL, Type sysname NULL )\n" +
                 "if exists (select 1 from sys.all_objects where name='dm_os_enumerate_fixed_drives' and type ='V' and is_ms_shipped = 1)\n" +
                 "begin\n" +
                 "    insert #fixdrv select fixed_drive_path, free_space_in_bytes/(1024*1024), drive_type_desc from sys.dm_os_enumerate_fixed_drives      \n" +
@@ -46,12 +75,12 @@ public interface SQLHelper {
                 "    update #fixdrv set Name = Name + ':/', Type = 'Fixed' where Type IS NULL \n" +
                 "end\n" +
                 "select * from #fixdrv;\n" +
-                "drop table #fixdrv;").get(10, TimeUnit.SECONDS);
+                "drop table #fixdrv;"), CONNECT_TIMEOUT_SECONDS);
     }
 
     @SneakyThrows
     static List<Map<String, Object>> getSQLPathChildren(Client connection, String path) {
-        return connection.getResult("declare @Path nvarchar(255)\n" +
+        return await(connection.getResult("declare @Path nvarchar(255)\n" +
                 "declare @Name nvarchar(255)\n" +
                 "select @Path = N'" + path + "'\n" +
                 "select @Name = null;\n" +
@@ -103,6 +132,6 @@ public interface SQLHelper {
                 "end \n" +
                 "\n" +
                 "SELECT Name, IsFile, FullName FROM #filetmpfin ORDER BY IsFile ASC, Name ASC \n" +
-                "drop table #filetmpfin").get(10, TimeUnit.SECONDS);
+                "drop table #filetmpfin"), QUERY_TIMEOUT_SECONDS);
     }
 }

@@ -6,6 +6,8 @@ import com.intellij.notification.NotificationType;
 import com.intellij.notification.Notifications.Bus;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.FileSaverDescriptor;
+import com.intellij.openapi.progress.ProcessCanceledException;
+import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import dev.niels.sqlbackuprestore.Constants;
@@ -19,6 +21,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
+import java.util.concurrent.ExecutionException;
 
 import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.LOAD;
 import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.SAVE;
@@ -46,21 +49,50 @@ public class FileDialog {
     }
 
     private RemoteFile[] choose(DialogType type, String fileName) {
-        var fs = new DatabaseFileSystem(connection);
-        var roots = fs.getRoots();
-
-        if (roots.length == 0) {
-            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, "Error occurred", "The database user for this connection is not allowed to read drives.", NotificationType.ERROR));
+        var listed = listRoots();
+        if (listed == null) {
             return null;
         }
 
-        var initial = getInitial(roots);
-
         if (type == LOAD) {
-            return loadFile(roots, initial);
+            return loadFile(listed.roots(), listed.initial());
         } else {
-            return saveFile(fileName, roots, initial);
+            return saveFile(fileName, listed.roots(), listed.initial());
         }
+    }
+
+    /**
+     * Queries the drives and the directory to open under a cancellable modal progress, off the EDT. The first
+     * statement on a fresh session also connects, which may take a while or need the EDT itself (a password prompt),
+     * so doing this on the EDT froze the IDE and could only end in a timeout (#23). Errors become a notification;
+     * {@code null} means there is nothing to show.
+     */
+    private @Nullable Listed listRoots() {
+        var fs = new DatabaseFileSystem(connection);
+        Listed listed;
+        try {
+            listed = ProgressManager.getInstance().runProcessWithProgressSynchronously(() -> {
+                var roots = fs.getRoots();
+                return new Listed(roots, roots.length == 0 ? null : getInitial(roots));
+            }, "Listing files on " + connection.getDbName(), true, project);
+        } catch (ProcessCanceledException e) {
+            return null;
+        } catch (Exception e) {
+            var cause = e instanceof ExecutionException && e.getCause() != null ? e.getCause() : e;
+            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR,
+                    "Unable to list the files on " + connection.getDbName() + ": " + StringUtils.defaultIfBlank(cause.getMessage(), cause.toString()),
+                    NotificationType.ERROR));
+            return null;
+        }
+
+        if (listed.roots().length == 0) {
+            Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, "The database user for this connection is not allowed to read drives.", NotificationType.ERROR));
+            return null;
+        }
+        return listed;
+    }
+
+    private record Listed(VirtualFile[] roots, @Nullable RemoteFile initial) {
     }
 
     private @NotNull RemoteFile @NotNull [] loadFile(VirtualFile[] roots, RemoteFile initial) {

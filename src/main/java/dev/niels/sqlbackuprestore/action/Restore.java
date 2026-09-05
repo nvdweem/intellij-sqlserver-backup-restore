@@ -181,11 +181,22 @@ public class Restore extends DumbAwareAction {
     }
 
     /**
-     * Helper invokeAndWait method that returns the value from the supplier
+     * Helper invokeAndWait method that returns the value from the supplier. A supplier that throws yields
+     * {@code null} (after reporting the error); it must not leave the caller waiting forever.
      */
     public <T> T invokeAndWait(Supplier<T> supplier) {
         var blocker = new ArrayBlockingQueue<Optional<T>>(1);
-        ApplicationManager.getApplication().invokeLater(() -> blocker.add(Optional.ofNullable(supplier.get())));
+        ApplicationManager.getApplication().invokeLater(() -> {
+            Optional<T> value = Optional.empty();
+            try {
+                value = Optional.ofNullable(supplier.get());
+            } catch (RuntimeException e) {
+                log.warn("Restore step failed", e);
+                Bus.notify(new Notification(Constants.NOTIFICATION_GROUP, Constants.ERROR, StringUtils.defaultIfBlank(e.getMessage(), e.toString()), NotificationType.ERROR));
+            } finally {
+                blocker.add(value);
+            }
+        });
         try {
             return blocker.take().orElse(null);
         } catch (InterruptedException e) {
