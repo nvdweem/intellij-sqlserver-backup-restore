@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- #88 - Fixed the restore dialog ignoring OK when the SQL Server's files don't exist on the IDE's machine (e.g. SQL Server in a Linux container)
+- Data files restored onto a Linux SQL Server no longer get a backslash in their name
+
 ## 1.0.10 - 2026-07-17
 
 - Added support for IntelliJ IDEA 2026.2 (now requires 2026.2 or later)

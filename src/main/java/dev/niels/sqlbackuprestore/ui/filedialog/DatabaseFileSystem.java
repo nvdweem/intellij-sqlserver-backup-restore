@@ -20,7 +20,7 @@ import org.jetbrains.annotations.Nullable;
 @NoArgsConstructor(force = true)
 @RequiredArgsConstructor
 public class DatabaseFileSystem extends VirtualFileSystem implements NonPhysicalFileSystem {
-    private static final String PROTOCOL = "mssqldb";
+    static final String PROTOCOL = "mssqldb";
     private final Client connection;
 
     @SneakyThrows

@@ -36,6 +36,9 @@ repositories {
 }
 
 dependencies {
+    testImplementation("org.junit.jupiter:junit-jupiter:5.13.4")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
     intellijPlatform {
         zipSigner()
 
@@ -127,5 +130,9 @@ tasks {
 
     runIde {
         jvmArgs = listOf("-Xmx1500M", "-XX:+AllowEnhancedClassRedefinition")
+    }
+
+    test {
+        useJUnitPlatform()
     }
 }

@@ -18,7 +18,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Optional;
+import java.util.Arrays;
 
 import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.LOAD;
 import static dev.niels.sqlbackuprestore.ui.filedialog.DialogType.SAVE;
@@ -110,25 +110,7 @@ public class FileDialog {
 
     @Nullable
     private RemoteFile getRemoteFile(VirtualFile[] roots, String path) {
-        var parts = StringUtils.defaultIfBlank(path, "").split("[\\\\/]");
-        var finalParts = parts.length > 0 ? parts : new String[]{"/"};
-
-        for (VirtualFile root : roots) {
-            if (!root.getName().equals(finalParts[0])) {
-                continue;
-            }
-
-            var current = Optional.of(root);
-            for (var i = 1; i < finalParts.length && current.isPresent(); i++) {
-                var ic = i;
-                current = current.map(c -> c instanceof RemoteFile rf ? rf.getChild(finalParts[ic], true) : c.findChild(finalParts[ic]));
-            }
-
-            if (current.isPresent()) {
-                return (RemoteFile) current.get();
-            }
-        }
-        return null;
+        return RemoteFile.resolve(Arrays.asList(roots), StringUtils.defaultIfBlank(path, ""));
     }
 
     @NotNull

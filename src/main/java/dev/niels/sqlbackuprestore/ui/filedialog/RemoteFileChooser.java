@@ -7,6 +7,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent;
 import com.intellij.openapi.actionSystem.DefaultActionGroup;
 import com.intellij.openapi.fileChooser.FileChooserDescriptor;
 import com.intellij.openapi.fileChooser.ex.FileChooserDialogImpl;
+import com.intellij.openapi.fileChooser.ex.FileLookup;
 import com.intellij.openapi.project.DumbAwareAction;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
@@ -36,6 +37,12 @@ class RemoteFileChooser extends FileChooserDialogImpl {
     @Override
     protected @NotNull String getPresentableUrl(@NotNull VirtualFile virtualFile) {
         return RemoteChooserRecents.presentableUrl(virtualFile);
+    }
+
+    /** OK checks the path field through this finder; the stock one only accepts paths that exist on the IDE's machine. */
+    @Override
+    protected FileLookup.@NotNull Finder createFinder() {
+        return new RemoteFsFinder(roots);
     }
 
     @Override

@@ -9,12 +9,14 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.lang3.Strings;
 import org.jetbrains.annotations.Contract;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 
 /**
  * Tree navigation from the connection
@@ -60,6 +62,45 @@ public class RemoteFile extends VirtualFile {
     @Override
     public String getPath() {
         return path;
+    }
+
+    /**
+     * The path as the server knows it. The default swaps separators for the IDE's platform, which turns a Linux
+     * server's {@code /var/backups} into {@code \var\backups} on a Windows client.
+     */
+    @NotNull
+    @Override
+    public String getPresentableUrl() {
+        return path;
+    }
+
+    /**
+     * Walk {@code path} down from the root it starts with, through the cached children, so the result is the very
+     * instance the tree shows. A missing tail yields a placeholder that doesn't {@link #exists()}; {@code null} means
+     * no root matched (e.g. a Windows path on a Linux server).
+     */
+    @Nullable
+    public static RemoteFile resolve(List<? extends VirtualFile> roots, String path) {
+        var normalized = RemotePaths.normalize(path);
+        for (VirtualFile root : roots) {
+            if (!(root instanceof RemoteFile current)) {
+                continue;
+            }
+            var rootPath = current.getPath();
+            if (normalized.equalsIgnoreCase(rootPath)) {
+                return current;
+            }
+            var rootPrefix = Strings.CS.appendIfMissing(rootPath, RemotePaths.separator(rootPath), "/", "\\");
+            if (!Strings.CI.startsWith(normalized, rootPrefix)) {
+                continue;
+            }
+
+            for (var name : normalized.substring(rootPrefix.length()).split("[\\\\/]")) {
+                current = (RemoteFile) current.getChild(name, true);
+            }
+            return current;
+        }
+        return null;
     }
 
     @Override
@@ -109,7 +150,7 @@ public class RemoteFile extends VirtualFile {
         }
 
         if (nonExistingIfNotFound) {
-            return new RemoteFile((DatabaseFileSystem) getFileSystem(), this, getPath() + "\\" + name, false, false);
+            return new RemoteFile((DatabaseFileSystem) getFileSystem(), this, RemotePaths.join(getPath(), name), false, false);
         }
         return null;
     }

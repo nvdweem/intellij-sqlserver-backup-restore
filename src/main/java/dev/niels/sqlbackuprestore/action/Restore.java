@@ -23,6 +23,7 @@ import dev.niels.sqlbackuprestore.ui.RestoreFilenamesDialog;
 import dev.niels.sqlbackuprestore.ui.RestoreFullPartialDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.FileDialog;
 import dev.niels.sqlbackuprestore.ui.filedialog.RemoteFile;
+import dev.niels.sqlbackuprestore.ui.filedialog.RemotePaths;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
@@ -276,7 +277,7 @@ public class Restore extends DumbAwareAction {
         private String determineFileName(String path, Map<String, Object> values) {
             var type = (String) values.get("Type");
             var ext = Strings.CI.equals(type, "L") ? "_log.ldf" : ".mdf";
-            return StringUtils.stripEnd(path, "/\\") + '\\' + uniqueName(target, ext);
+            return RemotePaths.join(path, uniqueName(target, ext));
         }
 
         private String uniqueName(String target, String ext) {
