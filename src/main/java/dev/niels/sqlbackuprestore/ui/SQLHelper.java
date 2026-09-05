@@ -8,6 +8,20 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public interface SQLHelper {
+    /** {@code value} as a T-SQL unicode string literal, quotes doubled. */
+    static String literal(String value) {
+        return "N'" + value.replace("'", "''") + "'";
+    }
+
+    /**
+     * Have SQL Server create {@code path} through {@code xp_create_subdir} (the procedure maintenance plans use, so it
+     * needs no xp_cmdshell). Yields the errors the server raised, empty when the directory was created.
+     */
+    @SneakyThrows
+    static List<String> createDirectory(Client connection, String path) {
+        return connection.executeCollectingErrors("EXEC master.dbo.xp_create_subdir " + literal(path)).get(10, TimeUnit.SECONDS);
+    }
+
     @SneakyThrows
     static String getDefaultBackupDirectory(Client connection) {
         return (String) connection.getSingle("declare @BackupDirectory nvarchar(512)\n" +

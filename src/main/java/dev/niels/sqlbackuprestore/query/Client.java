@@ -15,6 +15,7 @@ import lombok.Getter;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 
 public class Client implements AutoCloseable {
@@ -73,6 +74,24 @@ public class Client implements AutoCloseable {
 
     public CompletableFuture<List<Map<String, Object>>> execute(String query) {
         return getResult(query);
+    }
+
+    /**
+     * Runs {@code query} and yields the error messages SQL Server raised for it, empty when it succeeded. Errors don't
+     * fail the query's future (they only reach the {@link Auditor}), so this is the way to find out whether a
+     * statement did what it was asked.
+     */
+    public CompletableFuture<List<String>> executeCollectingErrors(String query) {
+        var errors = new CopyOnWriteArrayList<String>();
+        BiConsumer<MessageType, String> collector = (type, message) -> {
+            if (type == MessageType.ERROR) {
+                errors.add(message);
+            }
+        };
+        auditor.addWarningConsumer(collector);
+        return execute(query)
+                .whenComplete((r, t) -> auditor.removeWarningConsumer(collector))
+                .thenApply(r -> List.copyOf(errors));
     }
 
     public void done() {

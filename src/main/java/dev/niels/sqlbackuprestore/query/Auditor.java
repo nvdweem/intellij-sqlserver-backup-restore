@@ -24,6 +24,10 @@ public class Auditor implements DataAuditor {
         consumers.add(consumer);
     }
 
+    public void removeWarningConsumer(BiConsumer<MessageType, String> consumer) {
+        consumers.remove(consumer);
+    }
+
     private void produce(MessageType type, String s) {
         if (!consumers.isEmpty()) {
             consumers.forEach(c -> c.accept(type, s));

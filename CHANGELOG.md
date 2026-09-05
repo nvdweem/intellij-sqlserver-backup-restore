@@ -4,6 +4,7 @@
 
 - #88 - Fixed the restore dialog ignoring OK when the SQL Server's files don't exist on the IDE's machine (e.g. SQL Server in a Linux container)
 - Data files restored onto a Linux SQL Server no longer get a backslash in their name
+- #44 - "New Folder" in the file picker now creates the directory on the SQL Server (via `xp_create_subdir`) and reports the server's error when it can't, instead of failing silently
 
 ## 1.0.10 - 2026-07-17
 
